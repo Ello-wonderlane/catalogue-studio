@@ -19,7 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
+        with:
+          node-version: 20
+          cache: npm
       - name: 1. Live site answers
         run: |
           code=$(curl -s -o /tmp/site.html -w "%{http_code}" "$SITE_URL")
@@ -48,7 +50,8 @@ jobs:
           git add data && (git commit -m "Weekly catalogue backup" && git push) || echo "nothing to commit"
       - name: Open an issue if something failed
         if: failure()
-        env: { GH_TOKEN: ${{ github.token }} }
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create --title "⚠ Health check failed $(date -u +%F' '%H:%M) UTC" \
             --body "One of the checks failed (site / Supabase / build). Open the run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \

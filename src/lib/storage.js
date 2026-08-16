@@ -9,6 +9,8 @@ const KEY = "catalogue-studio-v3";
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const usingSupabase = Boolean(URL && ANON);
+// remember the link type (invite / recovery) BEFORE the client strips it from the address bar
+export const initialLinkType = (window.location.hash.match(/type=(invite|recovery|magiclink|signup)/) || [])[1] || "";
 export const sb = usingSupabase ? createClient(URL, ANON) : null;
 
 const SETTINGS_KEYS = ["brands", "categories", "materials", "colours", "skuConfig", "exportPrefs"];
@@ -95,7 +97,7 @@ export async function updatePresence(info) { if (channel) { try { await channel.
 // ---------- auth (login) ----------
 export const auth = {
   async session() { if (!sb) return null; const { data } = await sb.auth.getSession(); return data.session; },
-  onChange(cb) { if (!sb) return () => {}; const { data } = sb.auth.onAuthStateChange((_e, s) => cb(s)); return () => data.subscription.unsubscribe(); },
+  onChange(cb) { if (!sb) return () => {}; const { data } = sb.auth.onAuthStateChange((e, s) => cb(s, e)); return () => data.subscription.unsubscribe(); },
   signInPassword: (email, password) => sb.auth.signInWithPassword({ email, password }),
   signInLink: (email) => sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href.split("#")[0] } }),
   resetPassword: (email) => sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split("#")[0] }),

@@ -33,7 +33,7 @@ export default function App() {
   const [who, setWhoState] = useState(store.getWho());
   const [presence, setPresence] = useState([]);
   const [session, setSession] = useState(undefined); // undefined = checking, null = logged out
-  const [needPw, setNeedPw] = useState(() => /type=(invite|recovery)/.test(window.location.hash));
+  const [needPw, setNeedPw] = useState(() => ["invite", "recovery"].includes(store.initialLinkType));
   const [tab, setTab] = useState("catalogue");
   const [editing, setEditing] = useState(null);
   const [studioProduct, setStudioProduct] = useState(null);
@@ -53,7 +53,7 @@ export default function App() {
   const logIt = (action, sku, detail) => { const e = { who: (whoRef.current || "unknown") + (emailRef.current ? " <" + emailRef.current + ">" : ""), action, sku: sku || "", detail: detail || {} }; store.log(e).then((saved) => { if (!store.usingSupabase) setHistory((h) => [saved || { at: new Date().toISOString(), ...e }, ...h]); }).catch(console.error); };
 
   // ---- login gate (Supabase mode only) ----
-  useEffect(() => { if (!store.usingSupabase) { setSession(null); return; } store.auth.session().then(setSession); return store.auth.onChange((s) => setSession(s)); }, []);
+  useEffect(() => { if (!store.usingSupabase) { setSession(null); return; } store.auth.session().then(setSession); return store.auth.onChange((s, e) => { setSession(s); if (e === "PASSWORD_RECOVERY") setNeedPw(true); }); }, []);
   const email = session?.user?.email || ""; emailRef.current = email;
   useEffect(() => { if (email && !store.getWho()) setWho(email.split("@")[0]); }, [email]);
   const signOut = () => store.auth.signOut();
