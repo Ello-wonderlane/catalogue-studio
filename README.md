@@ -110,7 +110,9 @@ Notes
 
 ---
 
-## 4b. Shared data for the team with Supabase (optional, free tier)
+## 4b. Shared data + live collaboration with Supabase (optional, free tier)
+
+Version 3 stores each product as its own row, keeps an edit history and shows who is online. **If you set up Supabase with an earlier version, run `supabase/setup.sql` again** (SQL Editor → paste → Run) — it creates the new tables and the app moves your existing data across automatically on first load.
 
 1. supabase.com → New project → wait for it to be ready.
 2. SQL Editor → New query → paste the contents of `supabase/setup.sql` → Run.
@@ -134,7 +136,9 @@ Without any of these the app still does everything, using the built-in "instant"
 
 ## 6. Everyday use (short version — the full tutorial is the **Help** tab in the app)
 
-- **Bulk add from Excel:** Export / Import → Import existing sheet. Existing SKUs are skipped, brands/categories/colours are learned from the sheet.
+- **Bulk add from Excel:** Export / Import → Download blank template → fill → Import (mode "Add new only" appends and never replaces; "Add + update" overwrites matching SKUs). Blank SKUs are generated on import.
+- **Team:** enter your name in the header; the History tab lists every change with name/time; presence chips show who is online and which SKU they are editing.
+- **Freshness:** Catalogue shows Added / Updated dates, a "new" badge for the last 7 days, and filters (Added today / 7 days / 30 days / since date) plus sorting.
 - **Add one product:** Catalogue → + Add product. SKU builds itself; save is blocked on duplicates.
 - **New colourway:** Catalogue → New colourway on a row.
 - **New category / colour / material / brand:** Brands & SKU rules. Codes must be unique; use "Suggest code".
