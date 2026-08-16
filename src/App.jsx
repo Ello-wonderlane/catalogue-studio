@@ -103,6 +103,7 @@ export default function App() {
     if (updates.length) logIt("import-update", "", { updated: updates.length, skus: updates.slice(0, 20).map((p) => p.sku) });
   };
   const remove = (id) => { const p = products.find((x) => x.id === id); if (!p || !confirm(`Delete ${p.sku || "this product"}?`)) return; setProducts((ps) => ps.filter((x) => x.id !== id)); persist(() => store.deleteProducts([id])); logIt("delete", p.sku, { name: p.name || p.contents }); };
+  const removeMany = (ids) => { const list = products.filter((p) => ids.includes(p.id)); if (!list.length) return; if (!confirm(`Delete ${list.length} product${list.length > 1 ? "s" : ""}? This cannot be undone (History keeps a record).`)) return; setProducts((ps) => ps.filter((x) => !ids.includes(x.id))); persist(() => store.deleteProducts(ids), `Deleted ${list.length}`); logIt("delete", "", { count: list.length, skus: list.slice(0, 30).map((p) => p.sku) }); };
   const clearProducts = () => { const ids = products.map((p) => p.id); setProducts([]); persist(() => store.deleteProducts(ids)); logIt("delete-all", "", { count: ids.length }); };
   const restoreAll = (s) => { applySettings(s); const list = s.products || []; setProducts(list); persist(() => store.replaceAllProducts(list, who), "Backup restored"); logIt("restore", "", { products: list.length, from: s.exportedAt || "" }); };
   const applyThumb = (id, thumb) => { const p = products.find((x) => x.id === id); if (!p) return; const np = { ...p, thumb, updatedAt: new Date().toISOString() }; setProducts((ps) => ps.map((x) => (x.id === id ? np : x))); persist(() => store.upsertProducts([np], who), "Thumbnail updated"); logIt("thumb", p.sku, {}); };
@@ -130,7 +131,7 @@ export default function App() {
       </header>
       {!who && loaded && <div style={{ background: "#FBEAEA", borderBottom: "1px solid #E6B8B8", padding: "8px 24px", fontSize: 13 }}>Please enter your name (top right) so the history shows who made each change.</div>}
       <main className="wrap">
-        {tab === "catalogue" && <CatalogueView {...{ products: visible, brands, dupSkus, filterBrand, setFilterBrand, q, setQ, startNew, startEdit, duplicate, remove, openStudio, othersEditing }} />}
+        {tab === "catalogue" && <CatalogueView {...{ products: visible, brands, dupSkus, filterBrand, setFilterBrand, q, setQ, startNew, startEdit, duplicate, remove, removeMany, openStudio, othersEditing }} />}
         {tab === "edit" && editing && <EditView {...{ product: editing, setProduct: setEditing, products, brands, categories, materials, colours, skuConfig, ctx, aiSettings, othersEditing, onSave: (p) => { upsertProduct(p); say("Saved " + p.sku); setTab("catalogue"); }, onCancel: () => setTab("catalogue"), openStudio, say }} />}
         {tab === "studio" && <StudioView {...{ products, product: studioProduct, setProduct: setStudioProduct, aiSettings, setAiSettings, onApplyThumb: applyThumb, say }} />}
         {tab === "brands" && <BrandsView {...{ brands, setBrands, categories, setCategories, materials, setMaterials, colours, setColours, skuConfig, setSkuConfig, say }} />}

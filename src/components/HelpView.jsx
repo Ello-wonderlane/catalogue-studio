@@ -20,6 +20,7 @@ const SECTIONS = [
       ["Fill the rest, draft copy if you like", "Prices (landing, MRP, selling — margin is calculated), dimensions, features. ✦ Draft with AI writes the description and features from what you've entered — always review it."],
       ["System vs manual SKUs", "SKUs built by the rule are plain; SKUs that were typed (manual tick) or imported from a sheet carry a grey 'manual' badge in the Catalogue (filter: SKU source) and a 'SKU source' column in exports. The generator always checks against every existing SKU — manual, imported or system — so it never re-uses one; on import it moves to the next free style number automatically."],
       ["Save", "Save is blocked if the SKU already exists. Use “use next style no.” or change the colour. New colour names get a permanent unique code automatically."],
+      ["Delete or export many at once", "Catalogue → tick the boxes (the header box selects everything currently visible — combine with search / brand / freshness filters) → Delete selected or Export selected. Deletions are recorded in History."],
       ["New colourway of an existing style", "Catalogue → New colourway on the row. Everything is copied except colour, image and SKU; type the colour and the SKU completes itself with the same style number."],
     ],
   },
