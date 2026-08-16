@@ -733,6 +733,38 @@
   "market": "ours",
   "directLinks": true
  },
+ "customFormats": [],
+ "requiredFields": [
+  "sku",
+  "imageUrl",
+  "colour",
+  "pattern",
+  "size",
+  "contents",
+  "packType",
+  "hsn",
+  "gst",
+  "mrp",
+  "selling",
+  "about",
+  "benefits",
+  "ageGroup",
+  "gender",
+  "warranty",
+  "care",
+  "material",
+  "compartment",
+  "laptop",
+  "height",
+  "width",
+  "length",
+  "weight",
+  "weightUnit",
+  "f1",
+  "f2",
+  "f3",
+  "water"
+ ],
  "products": [
   {
    "f1": "lightweight and durable",
@@ -1743,5 +1775,5 @@
    "materialCode": ""
   }
  ],
- "exportedAt": "2026-08-16T11:36:40.676Z"
+ "exportedAt": "2026-08-16T13:02:46.476Z"
 }
