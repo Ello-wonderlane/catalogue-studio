@@ -1,0 +1,53 @@
+import { useState } from "react";
+import { marginOf, fmtDate, daysAgo } from "../lib/util.js";
+import { isFolderLink } from "../lib/sku.js";
+
+const FRESH = [["any", "Any time"], ["1", "Added today"], ["7", "Added last 7 days"], ["30", "Added last 30 days"], ["u7", "Updated last 7 days"], ["since", "Added since date…"]];
+const SORTS = [["newest", "Newest added first"], ["updated", "Recently updated first"], ["sku", "SKU A → Z"], ["oldest", "Oldest first"]];
+
+export default function CatalogueView({ products, brands, dupSkus, filterBrand, setFilterBrand, q, setQ, startNew, startEdit, duplicate, remove, openStudio, othersEditing = [] }) {
+  const [fresh, setFresh] = useState("any");
+  const [since, setSince] = useState("");
+  const [sort, setSort] = useState("newest");
+
+  let list = products.filter((p) => {
+    if (fresh === "any") return true;
+    if (fresh === "u7") return daysAgo(p.updatedAt) <= 7;
+    if (fresh === "since") return since ? new Date(p.createdAt) >= new Date(since) : true;
+    return daysAgo(p.createdAt) <= +fresh;
+  });
+  const t = (x) => (x ? new Date(x).getTime() : 0);
+  list = [...list].sort((a, b) => sort === "newest" ? t(b.createdAt) - t(a.createdAt) : sort === "updated" ? t(b.updatedAt) - t(a.updatedAt) : sort === "oldest" ? t(a.createdAt) - t(b.createdAt) : (a.sku || "").localeCompare(b.sku || ""));
+  const isNew = (p) => daysAgo(p.createdAt) <= 7;
+
+  return (
+    <div>
+      <div className="row" style={{ marginBottom: 14 }}>
+        <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} style={{ width: 170 }}><option value="all">All brands</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+        <input placeholder="Search name, SKU, colour…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 240 }} />
+        <select value={fresh} onChange={(e) => setFresh(e.target.value)} style={{ width: 190 }}>{FRESH.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        {fresh === "since" && <input type="date" value={since} onChange={(e) => setSince(e.target.value)} style={{ width: 160 }} />}
+        <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ width: 190 }}>{SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <span className="note">{list.length} of {products.length}</span>
+        <button className="btn primary" style={{ marginLeft: "auto" }} onClick={startNew}>+ Add product</button>
+      </div>
+      <div className="panel" style={{ padding: 0, overflowX: "auto" }}>
+        {list.length === 0 ? <div className="empty"><h3>{products.length ? "Nothing matches these filters" : "No products yet"}</h3>{products.length ? "Change the freshness filter or search." : "Add your first product, or import your existing catalogue sheet from Export / Import."}</div> : (
+          <table className="cat">
+            <thead><tr><th></th><th>SKU</th><th>Product</th><th>Brand</th><th>Colour</th><th>MRP</th><th>Selling</th><th>Margin</th><th>Image link</th><th>Added</th><th>Updated</th><th></th></tr></thead>
+            <tbody>{list.map((p) => { const b = brands.find((x) => x.id === p.brandId); return (<tr key={p.id}>
+              <td>{p.thumb ? <img className="thumb" src={p.thumb} alt="" /> : <div className="thumb" />}</td>
+              <td className="mono" style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{p.sku || <span className="note">—</span>}{dupSkus.has(p.sku) && <span className="pill warn" style={{ marginLeft: 6 }}>duplicate</span>}{othersEditing.includes(p.sku) && <span className="pill warn" style={{ marginLeft: 6 }} title="a teammate has this open">being edited</span>}{isNew(p) && <span className="pill" style={{ marginLeft: 6, background: "#E8F0E4", borderColor: "#B9CDB0", color: "var(--olive)" }}>new</span>}</td>
+              <td>{p.name || <span className="note">{p.contents}</span>}</td>
+              <td><span className="pill">{b?.name || "?"}</span></td>
+              <td>{p.colour}</td><td>{p.mrp && "₹" + p.mrp}</td><td>{p.selling && "₹" + p.selling}</td><td>{marginOf(p) && marginOf(p) + "%"}</td>
+              <td>{p.imageUrl ? <a href={p.imageUrl} target="_blank" rel="noreferrer" style={{ color: "var(--ox)" }}>{isFolderLink(p.imageUrl) ? "folder ⚠" : "link"}</a> : <span className="note">none</span>}</td>
+              <td className="note" style={{ whiteSpace: "nowrap" }} title={p.source ? "via " + p.source : ""}>{fmtDate(p.createdAt)}</td>
+              <td className="note" style={{ whiteSpace: "nowrap" }}>{fmtDate(p.updatedAt)}</td>
+              <td style={{ whiteSpace: "nowrap" }}><button className="btn small" onClick={() => startEdit(p)}>Edit</button> <button className="btn small" onClick={() => openStudio(p)}>Studio</button> <button className="btn small" onClick={() => duplicate(p)}>New colourway</button> <button className="btn small" onClick={() => remove(p.id)}>Delete</button></td>
+            </tr>); })}</tbody>
+          </table>)}
+      </div>
+    </div>
+  );
+}
