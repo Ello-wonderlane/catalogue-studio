@@ -56,11 +56,11 @@ export default function CatalogueView({ products, brands, dupSkus, filterBrand, 
         <span style={{ marginLeft: "auto" }} />
         <div style={{ position: "relative" }}>
           <button className="btn" onClick={() => setPick((v) => !v)}>Columns ({colFields.length}) ▾</button>
-          {pick && <div className="panel" style={{ position: "absolute", right: 0, top: 44, zIndex: 9, width: 520, maxHeight: 420, overflowY: "auto", boxShadow: "0 8px 30px rgba(0,0,0,.12)" }}>
+          {pick && <div onClick={() => setPick(false)} style={{ position: "fixed", inset: 0, background: "rgba(23,24,26,.35)", zIndex: 30, display: "grid", placeItems: "center", padding: 16 }}><div className="panel" onClick={(e) => e.stopPropagation()} style={{ width: "min(680px, 100%)", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 12px 40px rgba(0,0,0,.2)" }}>
             <div className="row" style={{ marginBottom: 8 }}><b>Show columns</b><span style={{ marginLeft: "auto" }} /><button className="btn small" onClick={() => setCols(FIELDS.filter((f) => !["brand", "sku"].includes(f.key)).map((f) => f.key))}>All</button><button className="btn small" onClick={() => setCols(DEFAULT_COLS)}>Default</button><button className="btn small" onClick={() => setCols([])}>None</button><button className="btn small" onClick={() => setPick(false)}>Done</button></div>
-            <div className="grid3">{[...new Set(FIELDS.map((f) => f.grp))].map((g) => <div key={g}><label style={{ color: "var(--olive)" }}>{g}</label>{FIELDS.filter((f) => f.grp === g && !["brand", "sku"].includes(f.key)).map((f) => <label className="check" key={f.key}><input type="checkbox" checked={cols.includes(f.key)} onChange={() => setCols(cols.includes(f.key) ? cols.filter((k) => k !== f.key) : [...cols, f.key])} /> {f.label}</label>)}</div>)}</div>
+            <div className="pickgrid">{[...new Set(FIELDS.map((f) => f.grp))].map((g) => <div key={g}><label style={{ color: "var(--olive)" }}>{g}</label>{FIELDS.filter((f) => f.grp === g && !["brand", "sku"].includes(f.key)).map((f) => <label className="check" key={f.key}><input type="checkbox" checked={cols.includes(f.key)} onChange={() => setCols(cols.includes(f.key) ? cols.filter((k) => k !== f.key) : [...cols, f.key])} /> {f.label}</label>)}</div>)}</div>
             <div className="note" style={{ marginTop: 8 }}>SKU, product name, brand and the action buttons are always shown. Your choice is remembered on this browser.</div>
-          </div>}
+          </div></div>}
         </div>
         <button className="btn primary" onClick={startNew}>+ Add product</button>
       </div>

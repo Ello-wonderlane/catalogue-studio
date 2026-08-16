@@ -54,3 +54,7 @@ table.cat tr:hover td{background:var(--soft)}
 .bulk-grid .item img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
 .bulk-grid .item .cap{padding:6px 8px;font-size:11px;word-break:break-all}
 @media (prefers-reduced-motion:no-preference){.tab,.btn{transition:background .15s,color .15s}}
+
+.pickgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px 16px}
+.pickgrid label.check{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:700px){.top{position:static}.wrap{padding:14px}.grid2{grid-template-columns:1fr!important}}
