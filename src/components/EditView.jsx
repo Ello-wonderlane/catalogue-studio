@@ -6,7 +6,7 @@ import { buildSku, nextStyleNo, isFolderLink } from "../lib/sku.js";
 import { draftCopy } from "../lib/ai.js";
 import SkuTicket from "./SkuTicket.jsx";
 
-export default function EditView({ product, setProduct, products, brands, categories, materials, colours, skuConfig, ctx, aiSettings, othersEditing = [], onSave, onCancel, openStudio, say }) {
+export default function EditView({ product, setProduct, products, brands, categories, materials, colours, skuConfig, ctx, aiSettings, othersEditing = [], requiredFields = [], onSave, onCancel, openStudio, say }) {
   const [busy, setBusy] = useState(false);
   const [dept, setDept] = useState(() => categories.find((c) => c.code === product.categoryCode)?.dept || "Bags");
   const set = (k, v) => setProduct((p) => ({ ...p, [k]: v }));
@@ -45,7 +45,7 @@ export default function EditView({ product, setProduct, products, brands, catego
     if (f.type === "url") { const v = product[f.key] || ""; return <div className="row" style={{ flexWrap: "nowrap" }}><input value={v} onChange={(e) => set(f.key, e.target.value)} placeholder={f.key === "imageUrl" ? "main image https://…" : "https://… (optional)"} />{v && !isFolderLink(v) && <a href={v} target="_blank" rel="noreferrer" title="open"><img src={v.includes("drive.google.com/file/d/") ? "https://drive.google.com/thumbnail?id=" + (v.match(/\/d\/([\w-]+)/) || [])[1] : v} alt="" style={{ width: 38, height: 38, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} onError={(e) => { e.currentTarget.style.display = "none"; }} /></a>}{isFolderLink(v) && <span className="note" style={{ color: "var(--ox)", whiteSpace: "nowrap" }}>folder link ⚠</span>}</div>; }
     return <input type={f.type === "number" ? "number" : "text"} step={f.step} value={product[f.key]} onChange={(e) => set(f.key, e.target.value)} />;
   };
-  const skuDot = (f) => f.sku && <span style={{ color: SEG_COLORS[f.sku] }}> ●</span>;
+  const skuDot = (f) => <>{f.sku && <span style={{ color: SEG_COLORS[f.sku] }}> ●</span>}{requiredFields.includes(f.key) && String(product[f.key] ?? "").trim() === "" && <span style={{ color: "var(--ox)" }} title="required for a complete listing"> · missing</span>}</>;
 
   return (
     <div className="grid2" style={{ gridTemplateColumns: "1fr 360px", alignItems: "start" }}>

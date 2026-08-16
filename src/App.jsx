@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { FIELDS } from "./config/fields.js";
+import { FIELDS, DEFAULT_REQUIRED } from "./config/fields.js";
 import { DEFAULT_CATEGORIES, DEFAULT_MATERIALS, DEFAULT_COLOURS, DEFAULT_SKU } from "./config/taxonomy.js";
 import { DEFAULT_AI } from "./lib/ai.js";
 import { uid, emptyProduct } from "./lib/util.js";
@@ -29,6 +29,8 @@ export default function App() {
   const [skuConfig, setSkuConfig] = useState(DEFAULT_SKU);
   const [exportPrefs, setExportPrefs] = useState({ fields: FIELDS.map((f) => f.key), directLinks: true, market: "ours" });
   const [aiSettings, setAiSettings] = useState(DEFAULT_AI);
+  const [requiredFields, setRequiredFields] = useState(DEFAULT_REQUIRED);
+  const [customFormats, setCustomFormats] = useState([]);
   const [history, setHistory] = useState([]);
   const [who, setWhoState] = useState(store.getWho());
   const [presence, setPresence] = useState([]);
@@ -46,10 +48,10 @@ export default function App() {
   const whoRef = useRef(who); whoRef.current = who;
   const emailRef = useRef("");
 
-  const ctx = useMemo(() => ({ brands, colours, materials, categories, skuConfig }), [brands, colours, materials, categories, skuConfig]);
+  const ctx = useMemo(() => ({ brands, colours, materials, categories, skuConfig, requiredFields }), [brands, colours, materials, categories, skuConfig, requiredFields]);
   const say = (m) => { setToast(m); setTimeout(() => setToast(""), 2800); };
   const setWho = (n) => { store.setWho(n); setWhoState(n); store.updatePresence({ key: myKey.current, name: n, tab, sku: editing?.sku || "" }); };
-  const applySettings = (s) => { if (!s) return; s.brands && setBrands(s.brands); s.categories && setCategories(s.categories); s.materials && setMaterials(s.materials); s.colours && setColours(s.colours); s.skuConfig && setSkuConfig(s.skuConfig); s.exportPrefs && setExportPrefs(s.exportPrefs); lastSavedSettings.current = JSON.stringify(store.pickSettings({ ...s })); };
+  const applySettings = (s) => { if (!s) return; s.brands && setBrands(s.brands); s.categories && setCategories(s.categories); s.materials && setMaterials(s.materials); s.colours && setColours(s.colours); s.skuConfig && setSkuConfig(s.skuConfig); s.exportPrefs && setExportPrefs(s.exportPrefs); s.requiredFields && setRequiredFields(s.requiredFields); s.customFormats && setCustomFormats(s.customFormats); lastSavedSettings.current = JSON.stringify(store.pickSettings({ ...s })); };
   const logIt = (action, sku, detail) => { const e = { who: (whoRef.current || "unknown") + (emailRef.current ? " <" + emailRef.current + ">" : ""), action, sku: sku || "", detail: detail || {} }; store.log(e).then((saved) => { if (!store.usingSupabase) setHistory((h) => [saved || { at: new Date().toISOString(), ...e }, ...h]); }).catch(console.error); };
 
   // ---- login gate (Supabase mode only) ----
@@ -75,9 +77,9 @@ export default function App() {
     }, { key: myKey.current, name: store.getWho() || "unnamed", tab: "catalogue", sku: "" });
   })(); return () => un(); }, [session === undefined || (store.usingSupabase && !session)]);
   // ---- settings autosave (brands, codes, rules, export prefs) ----
-  useEffect(() => { if (!loaded) return; const s = { brands, categories, materials, colours, skuConfig, exportPrefs }; const j = JSON.stringify(s); if (j === lastSavedSettings.current) return;
+  useEffect(() => { if (!loaded) return; const s = { brands, categories, materials, colours, skuConfig, exportPrefs, requiredFields, customFormats }; const j = JSON.stringify(s); if (j === lastSavedSettings.current) return;
     const t = setTimeout(async () => { const prev = lastSavedSettings.current ? JSON.parse(lastSavedSettings.current) : {}; const changed = Object.keys(s).filter((k) => JSON.stringify(s[k]) !== JSON.stringify(prev[k])); lastSavedSettings.current = j; try { await store.saveSettings(s, whoRef.current); if (changed.length && changed.some((k) => k !== "exportPrefs")) logIt("settings", "", { changed }); } catch (e) { say("Save failed: " + e.message); } }, 700);
-    return () => clearTimeout(t); }, [brands, categories, materials, colours, skuConfig, exportPrefs, loaded]);
+    return () => clearTimeout(t); }, [brands, categories, materials, colours, skuConfig, exportPrefs, requiredFields, customFormats, loaded]);
   useEffect(() => { if (loaded) store.saveLocalAi(aiSettings); }, [aiSettings, loaded]);
   useEffect(() => { store.updatePresence({ key: myKey.current, name: who || "unnamed", tab, sku: tab === "edit" ? editing?.sku || "(new)" : "" }); }, [tab, editing?.sku, who]);
 
@@ -131,12 +133,12 @@ export default function App() {
       </header>
       {!who && loaded && <div style={{ background: "#FBEAEA", borderBottom: "1px solid #E6B8B8", padding: "8px 24px", fontSize: 13 }}>Please enter your name (top right) so the history shows who made each change.</div>}
       <main className="wrap">
-        {tab === "catalogue" && <CatalogueView {...{ products: visible, brands, dupSkus, filterBrand, setFilterBrand, q, setQ, startNew, startEdit, duplicate, remove, removeMany, openStudio, othersEditing }} />}
-        {tab === "edit" && editing && <EditView {...{ product: editing, setProduct: setEditing, products, brands, categories, materials, colours, skuConfig, ctx, aiSettings, othersEditing, onSave: (p) => { upsertProduct(p); say("Saved " + p.sku); setTab("catalogue"); }, onCancel: () => setTab("catalogue"), openStudio, say }} />}
+        {tab === "catalogue" && <CatalogueView {...{ products: visible, brands, dupSkus, filterBrand, setFilterBrand, q, setQ, startNew, startEdit, duplicate, remove, removeMany, openStudio, othersEditing, requiredFields }} />}
+        {tab === "edit" && editing && <EditView {...{ product: editing, setProduct: setEditing, products, brands, categories, materials, colours, skuConfig, ctx, aiSettings, othersEditing, requiredFields, onSave: (p) => { upsertProduct(p); say("Saved " + p.sku); setTab("catalogue"); }, onCancel: () => setTab("catalogue"), openStudio, say }} />}
         {tab === "studio" && <StudioView {...{ products, product: studioProduct, setProduct: setStudioProduct, aiSettings, setAiSettings, onApplyThumb: applyThumb, say }} />}
-        {tab === "brands" && <BrandsView {...{ brands, setBrands, categories, setCategories, materials, setMaterials, colours, setColours, skuConfig, setSkuConfig, say }} />}
+        {tab === "brands" && <BrandsView {...{ brands, setBrands, categories, setCategories, materials, setMaterials, colours, setColours, skuConfig, setSkuConfig, requiredFields, setRequiredFields, say }} />}
         {tab === "legend" && <LegendView {...{ ctx, products }} />}
-        {tab === "export" && <ExportView {...{ products, brands, setBrands, ctx, setCategories, setMaterials, exportPrefs, setExportPrefs, registerColours, addProducts, clearProducts, restoreAll, say }} />}
+        {tab === "export" && <ExportView {...{ products, brands, setBrands, ctx, setCategories, setMaterials, exportPrefs, setExportPrefs, registerColours, addProducts, clearProducts, restoreAll, customFormats, setCustomFormats, say }} />}
         {tab === "history" && <HistoryView {...{ history, products, startEdit }} />}
         {tab === "help" && <HelpView {...{ aiSettings, setAiSettings, goTo: setTab, email, say }} />}
       </main>

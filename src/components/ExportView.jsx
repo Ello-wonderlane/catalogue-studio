@@ -1,6 +1,7 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { FIELDS, NON_TEMPLATE, GENDER_MEANING, MARKETPLACES, HELPER_COLS } from "../config/fields.js";
+import { FIELDS, NON_TEMPLATE, GENDER_MEANING, MARKETPLACES, HELPER_COLS, missingFields } from "../config/fields.js";
+import FormatBuilder from "./FormatBuilder.jsx";
 import { SEG_HELP } from "../config/taxonomy.js";
 import { uid, download, emptyProduct, valueOf } from "../lib/util.js";
 import { uniqueCode, directImageUrl, isFolderLink, buildSku, nextStyleNo, ensureUniqueSku, decodeSku } from "../lib/sku.js";
@@ -19,13 +20,15 @@ function healthCheck(products, ctx) {
   add("products with a colour not in the colour list", products.filter((p) => p.colour && !ctx.colours.some((c) => c.name.toLowerCase() === p.colour.trim().toLowerCase())));
   add("products with no description", products.filter((p) => !p.about));
   add("products with a missing brand", products.filter((p) => !ctx.brands.some((b) => b.id === p.brandId)));
+  (ctx.requiredFields || []).forEach((k) => { const f = FIELDS.find((x) => x.key === k); if (!f || k === "brand") return; add(`products missing “${f.label}”`, products.filter((p) => String(p[k] ?? "").trim() === "")); });
   add("manual/imported SKUs that do not follow the SKU rule (cannot be decoded — fine if intentional)", products.filter((p) => p.skuLocked && p.sku && !decodeSku(p.sku, ctx)));
   const dup = (list, label) => { const c = {}; list.forEach((x) => (c[x.code] = (c[x.code] || 0) + 1)); const d = Object.keys(c).filter((k) => c[k] > 1); if (d.length) issues.push({ msg: `${label} codes used twice (${d.join(", ")})`, count: d.length, skus: [] }); };
   dup(ctx.colours, "colour"); dup(ctx.categories, "category"); dup(ctx.materials, "material"); dup(ctx.brands, "brand");
   return issues;
 }
 
-export default function ExportView({ products, brands, setBrands, ctx, setCategories, setMaterials, exportPrefs, setExportPrefs, registerColours, addProducts, clearProducts, restoreAll, say }) {
+export default function ExportView({ products, brands, setBrands, ctx, setCategories, setMaterials, exportPrefs, setExportPrefs, registerColours, addProducts, clearProducts, restoreAll, customFormats = [], setCustomFormats = () => {}, say }) {
+  const [builder, setBuilder] = useState(null); // null | "new" | format object
   const health = healthCheck(products, ctx);
   const [scope, setScope] = useState("all");
   const [importMode, setImportMode] = useState("add");
@@ -66,12 +69,21 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
     XLSX.utils.book_append_sheet(wb, ws, "Catalog"); XLSX.utils.book_append_sheet(wb, how, "How to fill"); XLSX.utils.book_append_sheet(wb, cats, "Categories"); XLSX.utils.book_append_sheet(wb, cols2, "Colours"); XLSX.utils.book_append_sheet(wb, mats, "Materials"); XLSX.utils.book_append_sheet(wb, legendSheet(), "SKU Legend");
     XLSX.writeFile(wb, "Catalogue_Template.xlsx"); say("Template downloaded");
   };
+  const val = (p, key) => { if (key === "missing") return missingFields(p, ctx.requiredFields || []).join(", "); if (key === "category") return ctx.categories.find((c) => c.code === p.categoryCode)?.name || ""; if (key === "department") return ctx.categories.find((c) => c.code === p.categoryCode)?.dept || ""; if (key === "brandCode") return brands.find((b) => b.id === p.brandId)?.code || ""; if (key === "imageUrl") return link(p.imageUrl); return valueOf(p, key, brands); };
+  const exportCustom = (fmt) => {
+    const data = rows.map((p) => fmt.cols.map((c) => (c.map === "__const" ? c.constant : c.map ? val(p, c.map) : "")));
+    const ws = XLSX.utils.aoa_to_sheet([...fmt.headerRows.map((r) => fmt.cols.map((_, i) => r[i] ?? "")), ...data]);
+    ws["!cols"] = fmt.cols.map((c) => ({ wch: Math.min(40, Math.max(12, String(c.header).length + 2)) }));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, (fmt.sheet || "Sheet1").slice(0, 31));
+    XLSX.writeFile(wb, `${fmt.name.replace(/[^\w-]+/g, "_")}_${new Date().toISOString().slice(0, 10)}.xlsx`); say(`Exported ${rows.length} rows in “${fmt.name}” format`);
+  };
   const doExport = (asCsv) => {
-    const mp = MARKETPLACES[exportPrefs.market];
+    if (exportPrefs.market.startsWith("custom:")) { const f = customFormats.find((x) => x.id === exportPrefs.market.slice(7)); if (f) return exportCustom(f); }
+    const mp = MARKETPLACES[exportPrefs.market] || MARKETPLACES.ours;
     let header, keys;
     if (mp.cols) { header = mp.cols.map((c) => c[0]); keys = mp.cols.map((c) => c[1]); }
     else { const fs = FIELDS.filter((f) => sel.has(f.key)); header = fs.map((f) => f.label); keys = fs.map((f) => f.key); }
-    const data = rows.map((p) => keys.map((k) => { const f = FIELDS.find((x) => x.key === k); const v = k === "imageUrl" ? link(p.imageUrl) : valueOf(p, k, brands); return f?.type === "number" && v !== "" ? Number(v) : v; }));
+    const data = rows.map((p) => keys.map((k) => { const f = FIELDS.find((x) => x.key === k); const v = val(p, k); return f?.type === "number" && v !== "" ? Number(v) : v; }));
     const ws = XLSX.utils.aoa_to_sheet([header, ...data]);
     const urlCol = keys.indexOf("imageUrl");
     if (urlCol >= 0) rows.forEach((p, i) => { if (p.imageUrl) { const addr = XLSX.utils.encode_cell({ r: i + 1, c: urlCol }); if (ws[addr]) ws[addr].l = { Target: link(p.imageUrl) }; } });
@@ -152,8 +164,9 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
         <div className="panel">
           <h2 style={{ fontSize: 20, marginBottom: 6 }}>Export catalogue</h2>
           <div className="field"><label>Scope</label><select value={scope} onChange={(e) => setScope(e.target.value)}><option value="all">All brands ({products.length})</option>{brands.map((b) => <option key={b.id} value={b.id}>{b.name} ({products.filter((p) => p.brandId === b.id).length})</option>)}</select></div>
-          <div className="field"><label>Format</label><select value={exportPrefs.market} onChange={(e) => setExportPrefs({ ...exportPrefs, market: e.target.value })}>{Object.entries(MARKETPLACES).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}</select>
-            {exportPrefs.market !== "ours" && <div className="note" style={{ marginTop: 4 }}>Marketplace headers are a close approximation of the platform's flat file — always download the latest template from the seller portal and paste these columns across, since marketplaces rename fields from time to time.</div>}</div>
+          <div className="field"><label>Format</label><select value={exportPrefs.market} onChange={(e) => setExportPrefs({ ...exportPrefs, market: e.target.value })}>{Object.entries(MARKETPLACES).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}{customFormats.length > 0 && <optgroup label="Your marketplace templates">{customFormats.map((f) => <option key={f.id} value={"custom:" + f.id}>{f.name} ({f.cols.length} cols)</option>)}</optgroup>}</select>
+            {exportPrefs.market.startsWith("custom:") && <div className="row" style={{ marginTop: 6 }}><button className="btn small" onClick={() => setBuilder(customFormats.find((x) => x.id === exportPrefs.market.slice(7)))}>Edit mapping</button><button className="btn small" onClick={() => { if (confirm("Delete this format?")) { setCustomFormats(customFormats.filter((x) => x.id !== exportPrefs.market.slice(7))); setExportPrefs({ ...exportPrefs, market: "ours" }); } }}>Delete format</button></div>}
+            {exportPrefs.market !== "ours" && !exportPrefs.market.startsWith("custom:") && <div className="note" style={{ marginTop: 4 }}>Marketplace headers are a close approximation of the platform's flat file — always download the latest template from the seller portal and paste these columns across, since marketplaces rename fields from time to time.</div>}</div>
           <label className="check"><input type="checkbox" checked={exportPrefs.directLinks} onChange={(e) => setExportPrefs({ ...exportPrefs, directLinks: e.target.checked })} /> Convert Drive / Dropbox share links to direct image links</label>
           {folderCount > 0 && <div className="note" style={{ color: "var(--ox)", marginTop: 6 }}>{folderCount} product{folderCount > 1 && "s"} still point{folderCount === 1 && "s"} to a Drive <b>folder</b>. Folder links can't be converted — they'll be exported as-is (a human can open them; a marketplace can't).</div>}
           <div className="row" style={{ marginTop: 12 }}><button className="btn primary" disabled={!rows.length} onClick={() => doExport(false)}>Download .xlsx</button><button className="btn" disabled={!rows.length} onClick={() => doExport(true)}>Download .csv</button></div>
@@ -161,10 +174,15 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
         </div>
         <div className="panel">
           <div className="row" style={{ marginBottom: 6 }}><h2 style={{ fontSize: 20 }}>Columns to include</h2><span style={{ marginLeft: "auto" }} /><button className="btn small" onClick={() => setAll(FIELDS.map((f) => f.key))}>All</button><button className="btn small" onClick={() => setAll(FIELDS.filter((f) => !NON_TEMPLATE.includes(f.key)).map((f) => f.key))}>Original 28 only</button><button className="btn small" onClick={() => setAll(FIELDS.filter((f) => !f.price && f.key !== "margin").map((f) => f.key))}>Hide prices</button><button className="btn small" onClick={() => setAll([])}>None</button></div>
-          {exportPrefs.market !== "ours" ? <div className="note">Column selection applies to the standard format. Marketplace formats use their own fixed column set.</div> : (
+          {exportPrefs.market !== "ours" ? <div className="note">Column selection applies to the standard format. For an exact marketplace file, build a format from the marketplace's own template below. Marketplace formats use their own fixed column set.</div> : (
             <div className="grid3">{grps.map((g) => <div key={g}><label style={{ color: "var(--olive)" }}>{g}</label>{FIELDS.filter((f) => f.grp === g).map((f) => <label className="check" key={f.key}><input type="checkbox" checked={sel.has(f.key)} onChange={() => toggle(f.key)} /> {f.label}</label>)}</div>)}</div>)}
         </div>
       </div>
+      {builder ? <FormatBuilder formats={customFormats} setFormats={setCustomFormats} say={say} onClose={() => setBuilder(null)} editing={builder === "new" ? null : builder} /> : (
+        <div className="panel">
+          <div className="row"><h2 style={{ fontSize: 20 }}>Exact marketplace formats (Amazon, Nykaa, Ajio, Myntra, Flipkart…)</h2><span style={{ marginLeft: "auto" }} /><button className="btn primary" onClick={() => setBuilder("new")}>+ New format from a template file</button></div>
+          <div className="note" style={{ marginTop: 6 }}>Upload the marketplace's own listing template once, map its columns to your fields (auto-suggested), save it under a name. It then appears in the Format dropdown above and exports with the marketplace's exact headers — ready to upload back to the seller portal.{customFormats.length ? " Saved: " + customFormats.map((f) => f.name).join(", ") + "." : ""}</div>
+        </div>)}
       <div className="grid2">
         <div className="panel">
           <h2 style={{ fontSize: 20, marginBottom: 6 }}>Data health check</h2>

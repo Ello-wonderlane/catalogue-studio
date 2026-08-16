@@ -39,12 +39,13 @@ export const FIELDS = [
   { key: "f3", label: "Feature 3", type: "text", ai: true, grp: "Copy" },
   { key: "water", label: "Water Resistance Level", type: "select", options: ["water resistant", "waterproof", "not water resistant"], grp: "Build" },
   { key: "skuSource", label: "SKU source", type: "computed", grp: "Tracking" },
+  { key: "missing", label: "Missing fields", type: "computed", grp: "Tracking" },
   { key: "createdAt", label: "Added on", type: "date", grp: "Tracking" },
   { key: "updatedAt", label: "Updated on", type: "date", grp: "Tracking" },
 ];
 // Extra helper columns understood by the importer / written by the template (not stored as separate fields):
 export const HELPER_COLS = [["Department", "dept"], ["Category code", "categoryCode"], ["Style no.", "styleNo"]];
-export const NON_TEMPLATE = ["landing", "mrp", "selling", "margin", "createdAt", "updatedAt", "imageUrl2", "imageUrl3", "imageUrl4", "imageUrl5", "videoUrl", "skuSource"]; // extra columns beyond the original 28
+export const NON_TEMPLATE = ["landing", "mrp", "selling", "margin", "createdAt", "updatedAt", "imageUrl2", "imageUrl3", "imageUrl4", "imageUrl5", "videoUrl", "skuSource", "missing"]; // extra columns beyond the original 28
 export const GENDER_CODES = { female: "W", male: "M", unisex: "U", kids: "K" };
 export const GENDER_MEANING = { W: "Women", M: "Men", U: "Unisex", K: "Kids" };
 
@@ -64,3 +65,21 @@ export const MARKETPLACES = {
     ["MRP", "mrp"], ["Selling Price", "selling"], ["HSN Code", "hsn"], ["GST %", "gst"], ["Product Details", "about"], ["Special Features", "benefits"], ["Package Contents", "contents"], ["Pack Type", "packType"],
     ["Gender", "gender"], ["Age Group", "ageGroup"], ["Print & Pattern", "pattern"], ["Height (cm)", "height"], ["Width (cm)", "width"], ["Length (cm)", "length"], ["Weight", "weight"], ["Weight Unit", "weightUnit"], ["Compartment Detail", "compartment"], ["Care Instructions", "care"], ["Warranty", "warranty"], ["Water Resistance", "water"] ] },
 };
+
+// Fields that must be filled for a product to count as "complete" (editable in Brands & SKU rules → Completeness)
+export const DEFAULT_REQUIRED = ["sku", "imageUrl", "colour", "pattern", "size", "contents", "packType", "hsn", "gst", "mrp", "selling", "about", "benefits", "ageGroup", "gender", "warranty", "care", "material", "compartment", "laptop", "height", "width", "length", "weight", "weightUnit", "f1", "f2", "f3", "water"];
+export const missingFields = (p, required) => required.filter((k) => k !== "brand" && String(p[k] ?? "").trim() === "").map((k) => FIELDS.find((f) => f.key === k)?.label || k);
+// Extra "virtual" columns available when mapping marketplace templates
+export const VIRTUAL_FIELDS = [["name", "Product name"], ["category", "Category name"], ["categoryCode", "Category code"], ["department", "Department"], ["styleNo", "Style no."], ["brandCode", "Brand code"]];
+// Auto-mapping: marketplace header keyword → our field key (first match wins, checked top to bottom)
+export const AUTOMAP = [
+  [/(seller|vendor|merchant|item)[ _-]*sku|^sku|sku[ _-]*(id|code)/, "sku"], [/brand/, "brand"],
+  [/main[ _-]*image|image[ _-]*url[ _-]*1|^image[ _-]*(url)?$|primary[ _-]*image|front[ _-]*image/, "imageUrl"],
+  [/image.*2|other[ _-]*image.*1/, "imageUrl2"], [/image.*3|other[ _-]*image.*2/, "imageUrl3"], [/image.*4|other[ _-]*image.*3/, "imageUrl4"], [/image.*5|other[ _-]*image.*4/, "imageUrl5"], [/video/, "videoUrl"],
+  [/colou?r/, "colour"], [/pattern|print/, "pattern"], [/size/, "size"], [/package[ _-]*content|sales[ _-]*package|what.*box|contents/, "contents"], [/pack[ _-]*(type|of)|number[ _-]*of[ _-]*items|quantity[ _-]*per/, "packType"],
+  [/hsn/, "hsn"], [/gst|tax[ _-]*(code|rate)/, "gst"], [/landing|cost[ _-]*price|purchase[ _-]*price/, "landing"], [/mrp|maximum[ _-]*retail|list[ _-]*price/, "mrp"], [/selling|sale[ _-]*price|standard[ _-]*price|your[ _-]*price|offer[ _-]*price|^price$/, "selling"],
+  [/description|about|product[ _-]*detail/, "about"], [/bullet.*1|key[ _-]*feature|benefit|special[ _-]*feature|highlight/, "benefits"], [/bullet.*2|feature[ _-]*1/, "f1"], [/bullet.*3|feature[ _-]*2/, "f2"], [/bullet.*4|feature[ _-]*3/, "f3"],
+  [/age/, "ageGroup"], [/gender|ideal[ _-]*for|target/, "gender"], [/warranty/, "warranty"], [/care|wash/, "care"], [/material|fabric/, "material"], [/compartment|pocket/, "compartment"], [/laptop/, "laptop"],
+  [/height/, "height"], [/width/, "width"], [/length|depth/, "length"], [/weight.*unit|unit.*weight/, "weightUnit"], [/weight/, "weight"], [/water/, "water"],
+  [/product[ _-]*name|item[ _-]*name|title|model[ _-]*name|style[ _-]*name/, "name"], [/category|item[ _-]*type|product[ _-]*type|sub[ _-]*category/, "category"], [/department/, "department"], [/style[ _-]*(no|number|code)|model[ _-]*(no|number)/, "styleNo"],
+];

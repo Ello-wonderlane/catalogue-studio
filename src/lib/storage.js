@@ -13,7 +13,7 @@ export const usingSupabase = Boolean(URL && ANON);
 export const initialLinkType = (window.location.hash.match(/type=(invite|recovery|magiclink|signup)/) || [])[1] || "";
 export const sb = usingSupabase ? createClient(URL, ANON) : null;
 
-const SETTINGS_KEYS = ["brands", "categories", "materials", "colours", "skuConfig", "exportPrefs"];
+const SETTINGS_KEYS = ["brands", "categories", "materials", "colours", "skuConfig", "exportPrefs", "requiredFields", "customFormats"];
 export const pickSettings = (s) => Object.fromEntries(SETTINGS_KEYS.map((k) => [k, s[k]]));
 
 // ---------- who am I (name kept per browser) ----------

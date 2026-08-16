@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SEG_COLORS, SEG_HELP } from "../config/taxonomy.js";
+import { FIELDS, DEFAULT_REQUIRED } from "../config/fields.js";
 import { uid } from "../lib/util.js";
 import { uniqueCode, buildSku } from "../lib/sku.js";
 import SkuTicket from "./SkuTicket.jsx";
@@ -25,7 +26,8 @@ export function ListEditor({ title, items, setItems, fields, note, codeKey = "co
     </div>
   );
 }
-export default function BrandsView({ brands, setBrands, categories, setCategories, materials, setMaterials, colours, setColours, skuConfig, setSkuConfig, say }) {
+export default function BrandsView({ brands, setBrands, categories, setCategories, materials, setMaterials, colours, setColours, skuConfig, setSkuConfig, requiredFields = [], setRequiredFields = () => {}, say }) {
+  const reqToggle = (k) => setRequiredFields(requiredFields.includes(k) ? requiredFields.filter((x) => x !== k) : [...requiredFields, k]);
   const [nb, setNb] = useState({ name: "", code: "", hsn: "42022910", gst: "0.18", warranty: "domestic 6months", care: "Wipe with clean & dry cloth." });
   const addBrand = () => { if (!nb.name || !nb.code) return; if (brands.some((b) => b.code === nb.code)) { say("Brand code " + nb.code + " is already used"); return; } setBrands([...brands, { id: "b_" + uid(), ...nb }]); setNb({ ...nb, name: "", code: "" }); say("Brand added"); };
   const updBrand = (id, k, v) => setBrands(brands.map((b) => (b.id === id ? { ...b, [k]: v } : b)));
@@ -46,6 +48,11 @@ export default function BrandsView({ brands, setBrands, categories, setCategorie
             <td><button className="btn small" disabled={brands.length === 1} onClick={() => setBrands(brands.filter((x) => x.id !== b.id))}>Remove</button></td></tr>)}
             <tr><td><input placeholder="New brand name" value={nb.name} onChange={(e) => setNb({ ...nb, name: e.target.value })} /></td><td><input className="mono" style={{ width: 70 }} placeholder="XX" value={nb.code} onChange={(e) => setNb({ ...nb, code: e.target.value.toUpperCase() })} /></td><td><input style={{ width: 110 }} value={nb.hsn} onChange={(e) => setNb({ ...nb, hsn: e.target.value })} /></td><td><input style={{ width: 70 }} value={nb.gst} onChange={(e) => setNb({ ...nb, gst: e.target.value })} /></td><td><input value={nb.warranty} onChange={(e) => setNb({ ...nb, warranty: e.target.value })} /></td><td><input value={nb.care} onChange={(e) => setNb({ ...nb, care: e.target.value })} /></td><td><button className="btn small primary" onClick={addBrand}>Add brand</button></td></tr>
           </tbody></table></div>
+      </div>
+      <div className="panel">
+        <div className="row" style={{ marginBottom: 6 }}><h2 style={{ fontSize: 20 }}>Completeness — required fields</h2><span className="note">({requiredFields.length} required)</span><span style={{ marginLeft: "auto" }} /><button className="btn small" onClick={() => setRequiredFields(DEFAULT_REQUIRED)}>Default</button><button className="btn small" onClick={() => setRequiredFields(FIELDS.filter((f) => !["computed", "date", "brand"].includes(f.type) && f.key !== "brand").map((f) => f.key))}>All</button><button className="btn small" onClick={() => setRequiredFields([])}>None</button></div>
+        <div className="note" style={{ marginBottom: 8 }}>A product is “complete” when every ticked field is filled. Incomplete ones show a red “N missing” badge in the Catalogue (filter: incomplete only), the form marks each missing field, and the health check counts them per field.</div>
+        <div className="grid4">{[...new Set(FIELDS.map((f) => f.grp))].map((g) => <div key={g}><label style={{ color: "var(--olive)" }}>{g}</label>{FIELDS.filter((f) => f.grp === g && !["computed", "date"].includes(f.type) && f.key !== "brand").map((f) => <label className="check" key={f.key}><input type="checkbox" checked={requiredFields.includes(f.key)} onChange={() => reqToggle(f.key)} /> {f.label}</label>)}</div>)}</div>
       </div>
       {conflicts.length > 0 && <div className="panel" style={{ borderColor: "#E6B8B8", background: "#FBEAEA" }}><b>Code conflicts to fix:</b> {conflicts.join(", ")}. Two entries share a code, which would produce identical SKUs. Remove one below.</div>}
       <div className="grid2">

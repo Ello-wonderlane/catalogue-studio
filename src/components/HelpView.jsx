@@ -20,6 +20,7 @@ const SECTIONS = [
       ["Fill the rest, draft copy if you like", "Prices (landing, MRP, selling — margin is calculated), dimensions, features. ✦ Draft with AI writes the description and features from what you've entered — always review it."],
       ["System vs manual SKUs", "SKUs built by the rule are plain; SKUs that were typed (manual tick) or imported from a sheet carry a grey 'manual' badge in the Catalogue (filter: SKU source) and a 'SKU source' column in exports. The generator always checks against every existing SKU — manual, imported or system — so it never re-uses one; on import it moves to the next free style number automatically."],
       ["Save", "Save is blocked if the SKU already exists. Use “use next style no.” or change the colour. New colour names get a permanent unique code automatically."],
+      ["Choose which columns the table shows", "Catalogue → Columns ▾ → tick any fields (or All). SKU, name, brand and actions always stay. Remembered per browser; the table scrolls sideways when wide."],
       ["Delete or export many at once", "Catalogue → tick the boxes (the header box selects everything currently visible — combine with search / brand / freshness filters) → Delete selected or Export selected. Deletions are recorded in History."],
       ["New colourway of an existing style", "Catalogue → New colourway on the row. Everything is copied except colour, image and SKU; type the colour and the SKU completes itself with the same style number."],
     ],
@@ -58,6 +59,8 @@ const SECTIONS = [
   {
     id: "export", title: "6. Export for a marketplace or a buyer",
     body: [
+      ["Is every SKU complete?", "Brands & SKU rules → Completeness: tick the fields a finished listing must have. Then the Catalogue shows a red 'N missing' badge per row (hover for the list), the 'incomplete only' filter, a Missing fields column, and the health check counts gaps per field. The product form marks each empty required field."],
+      ["Exact marketplace files (Amazon, Nykaa, Ajio…)", "Export / Import → Exact marketplace formats → New format → upload the marketplace's own template (from its seller portal) → the tool reads its header rows, auto-maps columns to your fields, you fix the rest once (fixed values for things like country / condition), save under a name. It then appears in the Format dropdown and exports with the marketplace's exact headers, ready to upload."],
       ["Choose", "Export / Import → scope (all or one brand) → format (your template / Amazon / Flipkart / Myntra) → tick the columns you want → Download .xlsx."],
       ["What's inside", "Sheet 1 Catalog (image cells clickable, header filters). Sheet 2 SKU Legend so the receiver can decode any code. Marketplace formats mirror the platform's flat file — paste into the latest template from the seller portal."],
     ],
