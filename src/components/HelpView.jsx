@@ -1,4 +1,5 @@
 import { useState, Fragment } from "react";
+import UsersPanel from "./UsersPanel.jsx";
 
 // The in-app manual. Plain steps, written for a colleague who has never seen the tool.
 const SECTIONS = [
@@ -62,7 +63,8 @@ const SECTIONS = [
   {
     id: "team", title: "7. Working as a team (live)",
     body: [
-      ["Your name", "Type it once in the header box (top right). It is remembered on this browser and stamped on every change you make."],
+      ["Login", "Everyone signs in with their invited email (password, or a one-time email link). Only people on the Team access list (Help → right column) can get in; the owner adds/removes them and invites them in Supabase → Authentication → Users → Invite user."],
+      ["Your name", "Type it once in the header box (top right). It is remembered on this browser and, together with your login email, stamped on every change you make."],
       ["Who is online", "Coloured chips next to your name show teammates currently on the site, which tab they are on and which SKU they are editing. In the Catalogue, that row shows a red 'being edited' badge; the edit form warns you too."],
       ["Simultaneous edits", "Everyone can work at the same time — each product is saved separately, so two people editing two different products never overwrite each other. If two people edit the same product, the last save wins, which is why the badge is there."],
       ["Live updates", "Adds, edits, imports and settings changes appear on everyone's screen within a second or two, no refresh needed."],
@@ -88,7 +90,7 @@ const SECTIONS = [
   },
 ];
 
-export default function HelpView({ aiSettings, setAiSettings, goTo }) {
+export default function HelpView({ aiSettings, setAiSettings, goTo, email, say }) {
   const [open, setOpen] = useState("start");
   const set = (k, v) => setAiSettings({ ...aiSettings, [k]: v });
   return (
@@ -120,6 +122,7 @@ export default function HelpView({ aiSettings, setAiSettings, goTo }) {
             <select value={aiSettings.engine} onChange={(e) => set("engine", e.target.value)}><option value="instant">Instant offline (free)</option><option value="local">Local Stable Diffusion (free)</option><option value="claude">Claude API (paid key)</option></select></div>
           {aiSettings.engine === "local" && <div className="field"><label>Stable Diffusion WebUI URL</label><input value={aiSettings.endpoint} onChange={(e) => set("endpoint", e.target.value)} /><div className="note" style={{ marginTop: 4 }}>AUTOMATIC1111 / Forge started with <span className="mono">--api --cors-allow-origins=*</span>.</div></div>}
         </div>
+        <UsersPanel me={email} say={say} />
         <div className="panel">
           <h3 style={{ fontSize: 16, marginBottom: 6 }}>Quick jumps</h3>
           <div className="row"><button className="btn small" onClick={() => goTo("export")}>Import a sheet</button><button className="btn small" onClick={() => goTo("brands")}>Codes & SKU rule</button><button className="btn small" onClick={() => goTo("legend")}>Decode a SKU</button><button className="btn small" onClick={() => goTo("studio")}>Image studio</button></div>

@@ -2,7 +2,7 @@
 const COLORS = ["#7A2C2A", "#4A5637", "#5B4A8A", "#2E6E8E", "#B8975F", "#8A3B3B", "#3B6E5A"];
 const colorFor = (s) => COLORS[[...(s || "")].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
 
-export default function Presence({ presence, myKey, who, setWho }) {
+export default function Presence({ presence, myKey, who, setWho, email, signOut }) {
   const others = presence.filter((p) => p.key !== myKey);
   return (
     <div className="row" style={{ gap: 8 }}>
@@ -14,6 +14,7 @@ export default function Presence({ presence, myKey, who, setWho }) {
         </span>
       ))}
       {others.length === 0 && <span className="note">only you online</span>}
+      {email && <button className="btn small" onClick={signOut} title={email}>Sign out</button>}
     </div>
   );
 }

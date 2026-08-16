@@ -14,6 +14,7 @@ import ExportView from "./components/ExportView.jsx";
 import HelpView from "./components/HelpView.jsx";
 import HistoryView from "./components/HistoryView.jsx";
 import Presence from "./components/Presence.jsx";
+import LoginView from "./components/LoginView.jsx";
 
 const DEFAULT_BRANDS = [{ id: "b_yselle", name: "Yselle", code: "YS", hsn: "42022910", gst: "0.18", warranty: "domestic 6months", care: "Wipe with clean & dry cloth." }];
 // which fields changed between two versions of a product (for the history log)
@@ -31,6 +32,8 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [who, setWhoState] = useState(store.getWho());
   const [presence, setPresence] = useState([]);
+  const [session, setSession] = useState(undefined); // undefined = checking, null = logged out
+  const [needPw, setNeedPw] = useState(() => /type=(invite|recovery)/.test(window.location.hash));
   const [tab, setTab] = useState("catalogue");
   const [editing, setEditing] = useState(null);
   const [studioProduct, setStudioProduct] = useState(null);
@@ -41,15 +44,22 @@ export default function App() {
   const myKey = useRef(uid());
   const lastSavedSettings = useRef("");
   const whoRef = useRef(who); whoRef.current = who;
+  const emailRef = useRef("");
 
   const ctx = useMemo(() => ({ brands, colours, materials, categories, skuConfig }), [brands, colours, materials, categories, skuConfig]);
   const say = (m) => { setToast(m); setTimeout(() => setToast(""), 2800); };
   const setWho = (n) => { store.setWho(n); setWhoState(n); store.updatePresence({ key: myKey.current, name: n, tab, sku: editing?.sku || "" }); };
   const applySettings = (s) => { if (!s) return; s.brands && setBrands(s.brands); s.categories && setCategories(s.categories); s.materials && setMaterials(s.materials); s.colours && setColours(s.colours); s.skuConfig && setSkuConfig(s.skuConfig); s.exportPrefs && setExportPrefs(s.exportPrefs); lastSavedSettings.current = JSON.stringify(store.pickSettings({ ...s })); };
-  const logIt = (action, sku, detail) => { const e = { who: whoRef.current || "unknown", action, sku: sku || "", detail: detail || {} }; store.log(e).then((saved) => { if (!store.usingSupabase) setHistory((h) => [saved || { at: new Date().toISOString(), ...e }, ...h]); }).catch(console.error); };
+  const logIt = (action, sku, detail) => { const e = { who: (whoRef.current || "unknown") + (emailRef.current ? " <" + emailRef.current + ">" : ""), action, sku: sku || "", detail: detail || {} }; store.log(e).then((saved) => { if (!store.usingSupabase) setHistory((h) => [saved || { at: new Date().toISOString(), ...e }, ...h]); }).catch(console.error); };
+
+  // ---- login gate (Supabase mode only) ----
+  useEffect(() => { if (!store.usingSupabase) { setSession(null); return; } store.auth.session().then(setSession); return store.auth.onChange((s) => setSession(s)); }, []);
+  const email = session?.user?.email || ""; emailRef.current = email;
+  useEffect(() => { if (email && !store.getWho()) setWho(email.split("@")[0]); }, [email]);
+  const signOut = () => store.auth.signOut();
 
   // ---- load once, then subscribe to live changes ----
-  useEffect(() => { let un = () => {}; (async () => {
+  useEffect(() => { if (session === undefined || (store.usingSupabase && !session)) return; let un = () => {}; (async () => {
     try {
       const { settings, products: ps, history: hi } = await store.loadAll();
       applySettings(settings); setProducts(ps || []); setHistory(hi || []);
@@ -63,7 +73,7 @@ export default function App() {
       onHistory: (h) => setHistory((hs) => [h, ...hs].slice(0, 2000)),
       onPresence: setPresence,
     }, { key: myKey.current, name: store.getWho() || "unnamed", tab: "catalogue", sku: "" });
-  })(); return () => un(); }, []);
+  })(); return () => un(); }, [session === undefined || (store.usingSupabase && !session)]);
   // ---- settings autosave (brands, codes, rules, export prefs) ----
   useEffect(() => { if (!loaded) return; const s = { brands, categories, materials, colours, skuConfig, exportPrefs }; const j = JSON.stringify(s); if (j === lastSavedSettings.current) return;
     const t = setTimeout(async () => { const prev = lastSavedSettings.current ? JSON.parse(lastSavedSettings.current) : {}; const changed = Object.keys(s).filter((k) => JSON.stringify(s[k]) !== JSON.stringify(prev[k])); lastSavedSettings.current = j; try { await store.saveSettings(s, whoRef.current); if (changed.length && changed.some((k) => k !== "exportPrefs")) logIt("settings", "", { changed }); } catch (e) { say("Save failed: " + e.message); } }, 700);
@@ -108,11 +118,14 @@ export default function App() {
 
   const TABS = [["catalogue", "Catalogue"], ["edit", editing && products.some((x) => x.id === editing.id) ? "Edit product" : "Add product"], ["studio", "Image studio"], ["brands", "Brands & SKU rules"], ["legend", "SKU guide"], ["export", "Export / Import"], ["history", "History"], ["help", "Help"]];
 
+  if (session === undefined) return <div className="cs" style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}><div className="note">Loading…</div></div>;
+  if (store.usingSupabase && (!session || needPw)) return <LoginView onDone={() => { history.replaceState(null, "", window.location.pathname + window.location.search); setNeedPw(false); store.auth.session().then(setSession); }} />;
+
   return (
     <div className="cs">
       <header className="top">
         <div><h1>Catalogue Studio</h1><div className="sub">{brands.length} brand{brands.length !== 1 && "s"} · {products.length} products · {dupSkus.size ? <span style={{ color: "var(--ox)" }}>{dupSkus.size} duplicate SKU{dupSkus.size > 1 && "s"} to fix</span> : "all SKUs unique"} · {store.usingSupabase ? "shared live via Supabase" : "saved on this device"}</div></div>
-        <Presence {...{ presence, myKey: myKey.current, who, setWho }} />
+        <Presence {...{ presence, myKey: myKey.current, who, setWho, email, signOut }} />
         <nav className="tabs">{TABS.map(([k, l]) => <button key={k} className={"tab" + (tab === k ? " on" : "")} onClick={() => { if (k === "edit" && !editing) startNew(); else setTab(k); }}>{l}</button>)}</nav>
       </header>
       {!who && loaded && <div style={{ background: "#FBEAEA", borderBottom: "1px solid #E6B8B8", padding: "8px 24px", fontSize: 13 }}>Please enter your name (top right) so the history shows who made each change.</div>}
@@ -124,7 +137,7 @@ export default function App() {
         {tab === "legend" && <LegendView {...{ ctx, products }} />}
         {tab === "export" && <ExportView {...{ products, brands, setBrands, ctx, setCategories, setMaterials, exportPrefs, setExportPrefs, registerColours, addProducts, clearProducts, restoreAll, say }} />}
         {tab === "history" && <HistoryView {...{ history, products, startEdit }} />}
-        {tab === "help" && <HelpView {...{ aiSettings, setAiSettings, goTo: setTab }} />}
+        {tab === "help" && <HelpView {...{ aiSettings, setAiSettings, goTo: setTab, email, say }} />}
       </main>
       {toast && <div className="toast">{toast}</div>}
     </div>

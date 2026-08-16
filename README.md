@@ -121,6 +121,20 @@ Version 3 stores each product as its own row, keeps an edit history and shows wh
 5. For the live site: GitHub repo → Settings → Secrets and variables → Actions → New repository secret: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Push again; the build picks them up.
 Everyone opening the site now sees and edits the same catalogue. Last save wins, so avoid two people editing the same product at the same moment. API keys for AI stay in each person's browser and are never sent to Supabase.
 
+## 4c. Login (v4) — only invited people can open the catalogue
+
+One-time setup, ~5 minutes:
+1. Supabase → **SQL Editor** → run `supabase/setup.sql` again (adds the login rules; the owner `wonderlane.global@gmail.com` is pre-listed).
+2. Supabase → **Authentication → URL Configuration**: Site URL = `https://ello-wonderlane.github.io/catalogue-studio/` and add the same to Redirect URLs. Save.
+3. Supabase → **Authentication → Sign In / Providers → Email**: keep Email enabled; turn **off** "Allow new users to sign up" (so only invited people can register). Save.
+4. Supabase → **Authentication → Users → Add user → Send invitation** to `wonderlane.global@gmail.com`. Open the email → click the link → the site opens and asks you to choose a password → done.
+5. Push the code (commit + Sync). The live site now shows a sign-in screen.
+
+Adding a teammate later (owner only): Help tab → Team access → add their email → then Supabase → Authentication → Users → Invite user. Removing them from Team access blocks them immediately.
+
+## 4d. Watchdog (v4) — automatic health checks
+`.github/workflows/healthcheck.yml` runs every hour: live site up, Supabase up, code builds. On failure it opens a GitHub Issue and GitHub emails the owner. On Sundays it also stores a JSON backup of the whole catalogue in `data/` — for that, add one more repository secret **SUPABASE_SERVICE_ROLE_KEY** (Supabase → Project Settings → API Keys → service_role; never put this in the app). Run it manually any time from Actions → Health check → Run workflow.
+
 ## 5. Optional free AI on your own PC
 
 - **Text drafting (product copy):** install **Ollama** (https://ollama.com), then `ollama pull llama3.2` and start it with CORS allowed so the browser may call it:

@@ -9,7 +9,7 @@ const KEY = "catalogue-studio-v3";
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const usingSupabase = Boolean(URL && ANON);
-const sb = usingSupabase ? createClient(URL, ANON) : null;
+export const sb = usingSupabase ? createClient(URL, ANON) : null;
 
 const SETTINGS_KEYS = ["brands", "categories", "materials", "colours", "skuConfig", "exportPrefs"];
 export const pickSettings = (s) => Object.fromEntries(SETTINGS_KEYS.map((k) => [k, s[k]]));
@@ -91,3 +91,17 @@ export function subscribe({ onProduct, onProductDelete, onSettings, onHistory, o
   return () => { channel?.unsubscribe(); channel = null; };
 }
 export async function updatePresence(info) { if (channel) { try { await channel.track({ ...info, at: new Date().toISOString() }); } catch {} } }
+
+// ---------- auth (login) ----------
+export const auth = {
+  async session() { if (!sb) return null; const { data } = await sb.auth.getSession(); return data.session; },
+  onChange(cb) { if (!sb) return () => {}; const { data } = sb.auth.onAuthStateChange((_e, s) => cb(s)); return () => data.subscription.unsubscribe(); },
+  signInPassword: (email, password) => sb.auth.signInWithPassword({ email, password }),
+  signInLink: (email) => sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href.split("#")[0] } }),
+  resetPassword: (email) => sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split("#")[0] }),
+  setPassword: (password) => sb.auth.updateUser({ password }),
+  signOut: () => sb.auth.signOut(),
+};
+export async function listUsers() { if (!sb) return []; const { data } = await sb.from("catalogue_users").select("email,role,added_at").order("added_at"); return data || []; }
+export async function addUser(email, role = "editor") { const { error } = await sb.from("catalogue_users").insert({ email: email.trim().toLowerCase(), role }); if (error) throw error; }
+export async function removeUser(email) { const { error } = await sb.from("catalogue_users").delete().eq("email", email); if (error) throw error; }

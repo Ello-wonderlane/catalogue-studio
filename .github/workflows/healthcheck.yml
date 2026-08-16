@@ -1,0 +1,55 @@
+# Watchdog: every hour checks the live site + Supabase, rebuilds the code, and (Sundays) saves a JSON backup into data/.
+# On any failure it opens a GitHub Issue (and GitHub emails the repo owner).
+name: Health check
+on:
+  schedule:
+    - cron: "17 * * * *"      # every hour
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      SITE_URL: https://ello-wonderlane.github.io/catalogue-studio/
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - name: 1. Live site answers
+        run: |
+          code=$(curl -s -o /tmp/site.html -w "%{http_code}" "$SITE_URL")
+          echo "HTTP $code"; test "$code" = "200"
+          grep -q "Catalogue Studio" /tmp/site.html && echo "page title OK"
+      - name: 2. Supabase answers
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $VITE_SUPABASE_ANON_KEY" "$VITE_SUPABASE_URL/rest/v1/")
+          echo "REST $code"; test "$code" = "200"
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $VITE_SUPABASE_ANON_KEY" "$VITE_SUPABASE_URL/auth/v1/health")
+          echo "AUTH $code"; test "$code" = "200"
+      - name: 3. Code still builds
+        run: npm ci && npm run build
+      - name: 4. Weekly backup to data/ (Sundays, needs SUPABASE_SERVICE_ROLE_KEY secret)
+        if: always()
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "no service-role secret → backup skipped"; exit 0; fi
+          if [ "$(date -u +%u)" != "7" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then echo "not Sunday → skip"; exit 0; fi
+          mkdir -p data
+          H="Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+          curl -sf -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "$H" "$VITE_SUPABASE_URL/rest/v1/catalogue_products?select=data" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const rows=JSON.parse(s);console.log(JSON.stringify(rows.map(r=>r.data)))})' > /tmp/products.json
+          curl -sf -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "$H" "$VITE_SUPABASE_URL/rest/v1/catalogue_settings?id=eq.main&select=data" > /tmp/settings.json
+          node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync("/tmp/products.json"));const s=(JSON.parse(fs.readFileSync("/tmp/settings.json"))[0]||{}).data||{};fs.writeFileSync("data/backup-"+new Date().toISOString().slice(0,10)+".json",JSON.stringify({...s,products:p,exportedAt:new Date().toISOString()},null,1));console.log("products:",p.length)'
+          ls data | tail -n +9 | sed 's#^#data/#' | xargs -r rm -f   # keep the 8 most recent backups
+          git config user.name "catalogue-bot"; git config user.email "bot@users.noreply.github.com"
+          git add data && (git commit -m "Weekly catalogue backup" && git push) || echo "nothing to commit"
+      - name: Open an issue if something failed
+        if: failure()
+        env: { GH_TOKEN: ${{ github.token }} }
+        run: |
+          gh issue create --title "⚠ Health check failed $(date -u +%F' '%H:%M) UTC" \
+            --body "One of the checks failed (site / Supabase / build). Open the run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --label "health" || gh issue create --title "⚠ Health check failed $(date -u +%F' '%H:%M) UTC" --body "See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

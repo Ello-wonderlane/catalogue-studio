@@ -57,3 +57,37 @@ do $$ begin
   if not exists (select 1 from pg_policies where tablename='catalogue_state' and policyname='team all') then
     create policy "team all" on catalogue_state for all using (true) with check (true); end if;
 end $$;
+
+-- ============================================================
+-- v4: LOGIN. Only invited users (Authentication → Users) who are also
+-- listed in catalogue_users may read/write. Run this whole file again.
+-- ============================================================
+create table if not exists catalogue_users (
+  email text primary key,
+  role text default 'editor',
+  added_at timestamptz default now()
+);
+alter table catalogue_users enable row level security;
+insert into catalogue_users (email, role) values ('wonderlane.global@gmail.com', 'owner') on conflict (email) do nothing;
+
+-- helper: is the logged-in user on the allow-list?
+create or replace function public.is_catalogue_user() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from catalogue_users where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
+$$;
+grant execute on function public.is_catalogue_user() to authenticated, anon;
+
+-- replace the open "team all" policies with login-only policies
+do $$ declare t text; begin
+  foreach t in array array['catalogue_products','catalogue_settings','catalogue_history','catalogue_state'] loop
+    execute format('drop policy if exists "team all" on %I', t);
+    execute format('drop policy if exists "login all" on %I', t);
+    execute format('create policy "login all" on %I for all to authenticated using (public.is_catalogue_user()) with check (public.is_catalogue_user())', t);
+  end loop;
+end $$;
+drop policy if exists "users read" on catalogue_users;
+create policy "users read" on catalogue_users for select to authenticated using (public.is_catalogue_user());
+drop policy if exists "owner manage" on catalogue_users;
+create policy "owner manage" on catalogue_users for all to authenticated
+  using (exists (select 1 from catalogue_users u where lower(u.email) = lower(coalesce(auth.jwt() ->> 'email','')) and u.role = 'owner'))
+  with check (exists (select 1 from catalogue_users u where lower(u.email) = lower(coalesce(auth.jwt() ->> 'email','')) and u.role = 'owner'));
