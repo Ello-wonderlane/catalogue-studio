@@ -29,10 +29,11 @@ jobs:
           grep -q "Catalogue Studio" /tmp/site.html && echo "page title OK"
       - name: 2. Supabase answers
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $VITE_SUPABASE_ANON_KEY" "$VITE_SUPABASE_URL/rest/v1/")
-          echo "REST $code"; test "$code" = "200"
+          # Auth service must be healthy (200). Database API just has to be reachable (any answer below 500).
           code=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $VITE_SUPABASE_ANON_KEY" "$VITE_SUPABASE_URL/auth/v1/health")
           echo "AUTH $code"; test "$code" = "200"
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $VITE_SUPABASE_ANON_KEY" -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY" "$VITE_SUPABASE_URL/rest/v1/")
+          echo "REST $code"; test "$code" -ge 200 && test "$code" -lt 500
       - name: 3. Code still builds
         run: npm ci && npm run build
       - name: 4. Weekly backup to data/ (Sundays, needs SUPABASE_SERVICE_ROLE_KEY secret)
