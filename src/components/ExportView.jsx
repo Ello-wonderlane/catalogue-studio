@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { FIELDS, NON_TEMPLATE, GENDER_MEANING, MARKETPLACES, HELPER_COLS } from "../config/fields.js";
 import { SEG_HELP } from "../config/taxonomy.js";
 import { uid, download, emptyProduct, valueOf } from "../lib/util.js";
-import { uniqueCode, directImageUrl, isFolderLink, buildSku, nextStyleNo } from "../lib/sku.js";
+import { uniqueCode, directImageUrl, isFolderLink, buildSku, nextStyleNo, ensureUniqueSku, decodeSku } from "../lib/sku.js";
 
 function healthCheck(products, ctx) {
   const issues = [];
@@ -19,6 +19,7 @@ function healthCheck(products, ctx) {
   add("products with a colour not in the colour list", products.filter((p) => p.colour && !ctx.colours.some((c) => c.name.toLowerCase() === p.colour.trim().toLowerCase())));
   add("products with no description", products.filter((p) => !p.about));
   add("products with a missing brand", products.filter((p) => !ctx.brands.some((b) => b.id === p.brandId)));
+  add("manual/imported SKUs that do not follow the SKU rule (cannot be decoded — fine if intentional)", products.filter((p) => p.skuLocked && p.sku && !decodeSku(p.sku, ctx)));
   const dup = (list, label) => { const c = {}; list.forEach((x) => (c[x.code] = (c[x.code] || 0) + 1)); const d = Object.keys(c).filter((k) => c[k] > 1); if (d.length) issues.push({ msg: `${label} codes used twice (${d.join(", ")})`, count: d.length, skus: [] }); };
   dup(ctx.colours, "colour"); dup(ctx.categories, "category"); dup(ctx.materials, "material"); dup(ctx.brands, "brand");
   return issues;
@@ -124,7 +125,7 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
             if (!p.categoryCode) { blank++; return; }
             const pool = [...products, ...out];
             if (!p.styleNo) p.styleNo = nextStyleNo(pool, p.brandId, p.categoryCode, ctx.skuConfig.styleDigits);
-            p.sku = buildSku(p, { ...ctx, brands: newBrands, colours: localColours, categories: localCats }).sku; p.skuLocked = false;
+            const taken = new Set([...bySku.keys(), ...seenInSheet]); const r = ensureUniqueSku(p, { ...ctx, brands: newBrands, colours: localColours, categories: localCats }, taken); p.styleNo = r.styleNo; p.sku = r.sku; p.skuLocked = false;
           } else { p.sku = p.sku.toUpperCase(); p.skuLocked = true; }
           if (seenInSheet.has(p.sku)) { skipped++; return; } seenInSheet.add(p.sku);
           const existingP = bySku.get(p.sku);

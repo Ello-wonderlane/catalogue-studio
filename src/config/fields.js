@@ -38,12 +38,13 @@ export const FIELDS = [
   { key: "f2", label: "Feature 2", type: "text", ai: true, grp: "Copy" },
   { key: "f3", label: "Feature 3", type: "text", ai: true, grp: "Copy" },
   { key: "water", label: "Water Resistance Level", type: "select", options: ["water resistant", "waterproof", "not water resistant"], grp: "Build" },
+  { key: "skuSource", label: "SKU source", type: "computed", grp: "Tracking" },
   { key: "createdAt", label: "Added on", type: "date", grp: "Tracking" },
   { key: "updatedAt", label: "Updated on", type: "date", grp: "Tracking" },
 ];
 // Extra helper columns understood by the importer / written by the template (not stored as separate fields):
 export const HELPER_COLS = [["Department", "dept"], ["Category code", "categoryCode"], ["Style no.", "styleNo"]];
-export const NON_TEMPLATE = ["landing", "mrp", "selling", "margin", "createdAt", "updatedAt", "imageUrl2", "imageUrl3", "imageUrl4", "imageUrl5", "videoUrl"]; // extra columns beyond the original 28
+export const NON_TEMPLATE = ["landing", "mrp", "selling", "margin", "createdAt", "updatedAt", "imageUrl2", "imageUrl3", "imageUrl4", "imageUrl5", "videoUrl", "skuSource"]; // extra columns beyond the original 28
 export const GENDER_CODES = { female: "W", male: "M", unisex: "U", kids: "K" };
 export const GENDER_MEANING = { W: "Women", M: "Men", U: "Unisex", K: "Kids" };
 

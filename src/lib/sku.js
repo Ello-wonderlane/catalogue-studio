@@ -79,3 +79,10 @@ export function directImageUrl(u) {
   return u;
 }
 export const isFolderLink = (u) => /drive\.google\.com\/drive\/folders/.test(u || "");
+
+// Build the SKU and, if it already exists (manual, imported or generated), move to the next free style number.
+export function ensureUniqueSku(p, ctx, takenSet) {
+  let styleNo = p.styleNo || "1"; let sku = buildSku({ ...p, styleNo }, ctx).sku; let guard = 0;
+  while (takenSet.has(sku) && guard++ < 5000) { styleNo = String(parseInt(styleNo, 10) + 1).padStart(ctx.skuConfig.styleDigits, "0"); sku = buildSku({ ...p, styleNo }, ctx).sku; }
+  return { styleNo, sku };
+}
