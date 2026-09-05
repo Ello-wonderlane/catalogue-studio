@@ -76,3 +76,10 @@ export async function fitToJpeg(src, maxPx = 1600, quality = 0.85) {
   ctx.drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL("image/jpeg", quality);
 }
+
+// Flat single-colour backdrop. Amazon requires the MAIN listing image to sit on pure white
+// (RGB 255,255,255) — a procedural gradient, however subtle, can fail that check.
+export function plainBackground(hex = "#FFFFFF", size = 1024) {
+  const c = document.createElement("canvas"); c.width = size; c.height = size;
+  const g = c.getContext("2d"); g.fillStyle = hex; g.fillRect(0, 0, size, size); return c;
+}
