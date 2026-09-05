@@ -61,3 +61,18 @@ export function composite(bg, cutout, opts) {
   g.drawImage(cutout, x, y, w, h); return c;
 }
 export function thumbOf(cv, px = 320) { const w = cv.width, h = cv.height; const s = Math.min(px / w, px / h, 1); const c = document.createElement("canvas"); c.width = Math.round(w * s); c.height = Math.round(h * s); c.getContext("2d").drawImage(cv, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.82); }
+
+// Scale an image down to fit maxPx on its longest side and return a JPEG data URL.
+// Camera originals are 4-8 MB each; marketplaces only need ~1600px for zoom, which lands
+// around 300 KB. Uploading originals would fill the free Storage quota about 20x faster.
+export async function fitToJpeg(src, maxPx = 1600, quality = 0.85) {
+  const img = typeof src === "string" ? await loadImage(src) : src;
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const s = Math.min(maxPx / w, maxPx / h, 1);
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * s); c.height = Math.round(h * s);
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", quality);
+}

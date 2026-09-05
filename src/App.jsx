@@ -8,6 +8,7 @@ import * as store from "./lib/storage.js";
 import CatalogueView from "./components/CatalogueView.jsx";
 import EditView from "./components/EditView.jsx";
 import StudioView from "./components/StudioView.jsx";
+import MatchView from "./components/MatchView.jsx";
 import BrandsView from "./components/BrandsView.jsx";
 import LegendView from "./components/LegendView.jsx";
 import ExportView from "./components/ExportView.jsx";
@@ -128,7 +129,7 @@ export default function App() {
   const visible = products.filter((p) => (filterBrand === "all" || p.brandId === filterBrand) && (!q || [p.name, p.sku, p.colour, p.contents, p.about].join(" ").toLowerCase().includes(q.toLowerCase())));
   const othersEditing = presence.filter((x) => x.key !== myKey.current && x.sku && x.sku !== "(new)").map((x) => x.sku);
 
-  const TABS = [["catalogue", "Catalogue"], ["edit", editing && products.some((x) => x.id === editing.id) ? "Edit product" : "Add product"], ["studio", "Image studio"], ["brands", "Brands & SKU rules"], ["legend", "SKU guide"], ["export", "Export / Import"], ["history", "History"], ["help", "Help"]];
+  const TABS = [["catalogue", "Catalogue"], ["edit", editing && products.some((x) => x.id === editing.id) ? "Edit product" : "Add product"], ["studio", "Image studio"], ["match", "Match photos"], ["brands", "Brands & SKU rules"], ["legend", "SKU guide"], ["export", "Export / Import"], ["history", "History"], ["help", "Help"]];
 
   if (session === undefined) return <div className="cs" style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}><div className="note">Loading…</div></div>;
   if (store.usingSupabase && (!session || needPw)) return <LoginView onDone={() => { history.replaceState(null, "", window.location.pathname + window.location.search); setNeedPw(false); store.auth.session().then(setSession); }} />;
@@ -144,6 +145,7 @@ export default function App() {
       <main className="wrap">
         {tab === "catalogue" && <CatalogueView {...{ products: visible, brands, dupSkus, filterBrand, setFilterBrand, q, setQ, startNew, startEdit, duplicate, remove, removeMany, openStudio, othersEditing, requiredFields }} />}
         {tab === "edit" && editing && <EditView {...{ product: editing, setProduct: setEditing, products, brands, categories, materials, colours, skuConfig, ctx, aiSettings, othersEditing, requiredFields, onSave: (p) => { upsertProduct(p); say("Saved " + p.sku); setTab("catalogue"); }, onCancel: () => setTab("catalogue"), openStudio, say }} />}
+        {tab === "match" && <MatchView {...{ products, brands, onApplyImage: applyImage, say }} />}
         {tab === "studio" && <StudioView {...{ products, product: studioProduct, setProduct: setStudioProduct, aiSettings, setAiSettings, onApplyThumb: applyThumb, onApplyImage: applyImage, say }} />}
         {tab === "brands" && <BrandsView {...{ brands, setBrands, categories, setCategories, materials, setMaterials, colours, setColours, skuConfig, setSkuConfig, requiredFields, setRequiredFields, say }} />}
         {tab === "legend" && <LegendView {...{ ctx, products }} />}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { FIELDS, NON_TEMPLATE, GENDER_MEANING, MARKETPLACES, HELPER_COLS, missingFields } from "../config/fields.js";
+import { FIELDS, NON_TEMPLATE, GENDER_MEANING, MARKETPLACES, MARKET_REQUIRED, HELPER_COLS, missingFields } from "../config/fields.js";
 import FormatBuilder from "./FormatBuilder.jsx";
 import { SEG_HELP } from "../config/taxonomy.js";
 import { uid, download, emptyProduct, valueOf } from "../lib/util.js";
@@ -22,6 +22,21 @@ function healthCheck(products, ctx) {
   add("products with no description", products.filter((p) => !p.about));
   add("products with a missing brand", products.filter((p) => !ctx.brands.some((b) => b.id === p.brandId)));
   (ctx.requiredFields || []).forEach((k) => { const f = FIELDS.find((x) => x.key === k); if (!f || k === "brand") return; add(`products missing “${f.label}”`, products.filter((p) => String(p[k] ?? "").trim() === "")); });
+  // ---- listing hygiene: the things a marketplace accepts but that read badly, or get you delisted ----
+  const txt = (p) => String(p.about || "");
+  add("descriptions shorter than 80 characters (marketplaces rank these poorly)", products.filter((p) => txt(p) && txt(p).length < 80));
+  const sameAbout = {}; products.forEach((p) => { const k = txt(p).trim().toLowerCase(); if (k) sameAbout[k] = (sameAbout[k] || 0) + 1; });
+  add("descriptions copied word-for-word on another product (duplicate content is penalised)", products.filter((p) => txt(p) && sameAbout[txt(p).trim().toLowerCase()] > 1));
+  add("ALL-CAPS text in the name or description (rejected by Amazon and Myntra)", products.filter((p) => [p.name, p.about].some((v) => { const t = String(v || ""); const letters = t.replace(/[^A-Za-z]/g, ""); return letters.length > 12 && letters === letters.toUpperCase(); })));
+  add("promotional wording that marketplaces disallow (best/cheapest/sale/free shipping/#1)", products.filter((p) => /\b(best price|cheapest|lowest price|free shipping|sale|discount|#1|no\.?\s*1 )\b/i.test([p.name, p.about, p.benefits].join(" "))));
+  add("contact details in the listing text (email, phone or web address — grounds for removal)", products.filter((p) => /(@[\w-]+\.[a-z]{2,}|\bwww\.|https?:\/\/|\b[6-9]\d{9}\b)/i.test([p.name, p.about, p.benefits, p.care].join(" "))));
+  add("GST that is not one of 0 / 5 / 12 / 18 / 28", products.filter((p) => { const g = String(p.gst ?? "").trim(); if (!g) return false; const n = Math.round(parseFloat(g) * (parseFloat(g) < 1 ? 100 : 1)); return ![0, 5, 12, 18, 28].includes(n); }));
+  add("HSN codes that are not 4, 6 or 8 digits", products.filter((p) => { const h = String(p.hsn ?? "").trim(); return h && !/^\d{4}(\d{2})?(\d{2})?$/.test(h); }));
+  add("prices that are not plain numbers", products.filter((p) => [p.mrp, p.selling, p.landing].some((v) => String(v ?? "").trim() !== "" && !isFinite(Number(v)))));
+  add("a dimension or weight of zero", products.filter((p) => ["height", "width", "length", "weight"].some((k) => String(p[k] ?? "").trim() !== "" && Number(p[k]) === 0)));
+  add("fewer than 3 images (marketplaces convert far better with 4-5)", products.filter((p) => [p.imageUrl, p.imageUrl2, p.imageUrl3, p.imageUrl4, p.imageUrl5].filter(Boolean).length < 3));
+  add("image links that are not direct file URLs (a marketplace cannot fetch these)", products.filter((p) => p.imageUrl && !isFolderLink(p.imageUrl) && !/^https?:\/\/\S+\.(jpe?g|png|webp|avif)(\?|$)/i.test(p.imageUrl)));
+
   add("manual/imported SKUs that do not follow the SKU rule (cannot be decoded — fine if intentional)", products.filter((p) => p.skuLocked && p.sku && !decodeSku(p.sku, ctx)));
   const dup = (list, label) => { const c = {}; list.forEach((x) => (c[x.code] = (c[x.code] || 0) + 1)); const d = Object.keys(c).filter((k) => c[k] > 1); if (d.length) issues.push({ msg: `${label} codes used twice (${d.join(", ")})`, count: d.length, skus: [] }); };
   dup(ctx.colours, "colour"); dup(ctx.categories, "category"); dup(ctx.materials, "material"); dup(ctx.brands, "brand");
@@ -31,6 +46,17 @@ function healthCheck(products, ctx) {
 export default function ExportView({ products, brands, setBrands, ctx, setCategories, setMaterials, exportPrefs, setExportPrefs, registerColours, addProducts, clearProducts, restoreAll, customFormats = [], setCustomFormats = () => {}, say }) {
   const [builder, setBuilder] = useState(null); // null | "new" | format object
   const health = healthCheck(products, ctx);
+  // Per-marketplace pre-flight: which products would be rejected, and for which columns.
+  const label = (k) => FIELDS.find((f) => f.key === k)?.label || k;
+  const readiness = Object.entries(MARKET_REQUIRED).map(([mk, req]) => {
+    const gaps = {};
+    products.forEach((p) => req.forEach((k) => {
+      const v = k === "brand" ? (brands.find((b) => b.id === p.brandId)?.name || p.brand) : p[k];
+      if (String(v ?? "").trim() === "") (gaps[k] = gaps[k] || []).push(p.sku || p.name || "(no sku)");
+    }));
+    const blocked = new Set(Object.values(gaps).flat());
+    return { mk, name: MARKETPLACES[mk]?.name || mk, gaps, ready: products.length - blocked.size, total: products.length };
+  });
   const [scope, setScope] = useState("all");
   const [importMode, setImportMode] = useState("add");
   const rows = products.filter((p) => scope === "all" || p.brandId === scope);
@@ -192,6 +218,29 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
             <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>{health.map((h, i) => <li key={i}><b>{h.count}</b> {h.msg}{h.skus.length ? <span className="note"> — {h.skus.slice(0, 6).join(", ")}{h.skus.length > 6 && ` +${h.skus.length - 6} more`}</span> : null}</li>)}</ul>}
         </div>
         <div className="panel">
+          <h2 style={{ fontSize: 20, marginBottom: 6 }}>Marketplace readiness</h2>
+          <div className="note" style={{ marginBottom: 10 }}>How many products carry everything each platform asks for. Approximate — platforms change their mandatory columns without warning, so confirm against the seller portal's own template (and build a custom format from it below for an exact file).</div>
+          {!products.length ? <div className="note">No products yet.</div> : (
+            <table className="tbl" style={{ marginBottom: 6 }}><tbody>
+              {readiness.map((r) => {
+                const missing = Object.entries(r.gaps).sort((a, b) => b[1].length - a[1].length);
+                const all = r.ready === r.total;
+                return (
+                  <tr key={r.mk}>
+                    <td style={{ whiteSpace: "nowrap" }}><b>{r.name}</b></td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <span className="pill" style={all ? { background: "#E8F0E4", borderColor: "#B9CDB0", color: "var(--olive)" } : {}}>{r.ready} / {r.total} ready</span>
+                    </td>
+                    <td>{all ? <span className="note">every product has the required columns</span> :
+                      <span className="note">missing {missing.slice(0, 6).map(([k, list]) => `${label(k)} (${list.length})`).join(", ")}{missing.length > 6 ? ` +${missing.length - 6} more` : ""}</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody></table>
+          )}
+        </div>
+
+        <div className="card">
           <h2 style={{ fontSize: 20, marginBottom: 6 }}>Backup & restore (JSON)</h2>
           <div className="note" style={{ marginBottom: 10 }}>{usingSupabase ? <>Your catalogue is stored in Supabase and shared by the whole team, and a full backup is saved automatically every day to the private <span className="mono">catalogue-backups</span> repository. This button is for taking an extra copy before a big import or clear-out. Restore replaces everything.</> : <>Data lives in this browser only. Download a JSON backup regularly and restore it on any other device. Restore replaces everything.</>}</div>
           <div className="row"><button className="btn primary" onClick={() => download("data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ products, brands, categories: ctx.categories, materials: ctx.materials, colours: ctx.colours, skuConfig: ctx.skuConfig, exportPrefs, requiredFields: ctx.requiredFields, customFormats, exportedAt: new Date().toISOString() }, null, 2)), "catalogue-backup-" + new Date().toISOString().slice(0, 10) + ".json")}>Download backup</button>

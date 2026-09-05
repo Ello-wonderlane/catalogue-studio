@@ -64,6 +64,26 @@ export const MARKETPLACES = {
     ["Vendor SKU Code", "sku"], ["Brand", "brand"], ["Product Name", "name"], ["Image URL", "imageUrl"], ["Image URL 2", "imageUrl2"], ["Image URL 3", "imageUrl3"], ["Image URL 4", "imageUrl4"], ["Image URL 5", "imageUrl5"], ["Video URL", "videoUrl"], ["Vendor Colour", "colour"], ["Vendor Size", "size"], ["Material", "material"],
     ["MRP", "mrp"], ["Selling Price", "selling"], ["HSN Code", "hsn"], ["GST %", "gst"], ["Product Details", "about"], ["Special Features", "benefits"], ["Package Contents", "contents"], ["Pack Type", "packType"],
     ["Gender", "gender"], ["Age Group", "ageGroup"], ["Print & Pattern", "pattern"], ["Height (cm)", "height"], ["Width (cm)", "width"], ["Length (cm)", "length"], ["Weight", "weight"], ["Weight Unit", "weightUnit"], ["Compartment Detail", "compartment"], ["Care Instructions", "care"], ["Warranty", "warranty"], ["Water Resistance", "water"] ] },
+  meesho: { name: "Meesho (catalog upload style)", cols: [
+    ["Product ID / SKU", "sku"], ["Product Name", "name"], ["Image 1", "imageUrl"], ["Image 2", "imageUrl2"], ["Image 3", "imageUrl3"], ["Image 4", "imageUrl4"], ["Image 5", "imageUrl5"],
+    ["MRP", "mrp"], ["Price", "selling"], ["HSN", "hsn"], ["GST %", "gst"], ["Colour", "colour"], ["Size", "size"], ["Fabric / Material", "material"], ["Pattern", "pattern"],
+    ["Product Description", "about"], ["Key Features", "benefits"], ["Net Weight", "weight"], ["Weight Unit", "weightUnit"], ["Package Contents", "contents"], ["Ideal For", "gender"] ] },
+  ajio: { name: "AJIO (vendor sheet style)", cols: [
+    ["Vendor Article Number", "sku"], ["Brand", "brand"], ["Product Name", "name"], ["Image URL 1", "imageUrl"], ["Image URL 2", "imageUrl2"], ["Image URL 3", "imageUrl3"], ["Image URL 4", "imageUrl4"], ["Image URL 5", "imageUrl5"],
+    ["MRP", "mrp"], ["Selling Price", "selling"], ["HSN Code", "hsn"], ["GST", "gst"], ["Colour", "colour"], ["Size", "size"], ["Material", "material"], ["Pattern", "pattern"],
+    ["Product Description", "about"], ["Key Features", "benefits"], ["Gender", "gender"], ["Age Group", "ageGroup"], ["Care Instructions", "care"], ["Warranty", "warranty"],
+    ["Height (cm)", "height"], ["Width (cm)", "width"], ["Length (cm)", "length"], ["Weight", "weight"], ["Weight Unit", "weightUnit"], ["Package Contents", "contents"] ] },
+};
+
+// What each marketplace will reject a row for. Approximate on purpose — platforms change their
+// mandatory columns without notice, so treat this as a pre-flight check, not gospel, and confirm
+// against the seller portal's own template. Build a custom format from their file for an exact match.
+export const MARKET_REQUIRED = {
+  amazon:   ["sku", "brand", "name", "imageUrl", "selling", "mrp", "hsn", "about", "benefits", "colour", "material", "gender"],
+  flipkart: ["sku", "brand", "name", "imageUrl", "mrp", "selling", "hsn", "gst", "about", "colour", "size", "material", "contents"],
+  myntra:   ["sku", "brand", "name", "imageUrl", "mrp", "selling", "hsn", "gst", "about", "colour", "size", "material", "gender"],
+  meesho:   ["sku", "name", "imageUrl", "mrp", "selling", "hsn", "gst", "colour", "size", "material", "about"],
+  ajio:     ["sku", "brand", "name", "imageUrl", "mrp", "selling", "hsn", "gst", "colour", "size", "material", "about", "gender"],
 };
 
 // Fields that must be filled for a product to count as "complete" (editable in Brands & SKU rules → Completeness)
