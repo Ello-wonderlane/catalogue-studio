@@ -7,6 +7,7 @@ const SECTIONS = [
     id: "start", title: "1. First 10 minutes",
     body: [
       ["Import what you already have", "Export / Import → Import existing sheet → choose your catalogue .xlsx. Brands, categories, materials and colour codes are created from the sheet and every SKU is kept exactly as written. Nothing is typed twice."],
+      ["Load a supplier's sheet", "Give the sheet a Supplier SKU column and set “Swap the first N characters” (usually 2) in Export / Import. Their leading brand letters become your brand code and the rest of their number is kept, so AB1234XYZ becomes YS1234XYZ. Their original code stays on the product in Supplier SKU, so one look matches your stock to theirs. Anything that would land on an existing SKU is skipped, never duplicated."],
       ["Check the rules", "Brands & SKU rules → confirm brand codes, the SKU block order, and skim the colour list. Rename any category the import called “Category XX (rename me)”."],
       ["Run the health check", "Export / Import → Data health check tells you what's missing (images, prices, duplicate codes). Fix, then download a JSON backup."],
     ],

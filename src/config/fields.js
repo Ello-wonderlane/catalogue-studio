@@ -3,6 +3,7 @@
 export const FIELDS = [
   { key: "brand", label: "Brand", type: "brand", grp: "Identity" },
   { key: "sku", label: "Merchant SKU Code", type: "sku", grp: "Identity" },
+  { key: "supplierSku", label: "Supplier SKU", type: "text", grp: "Identity" },
   { key: "imageUrl", label: "Image URL", type: "url", grp: "Identity" },
   { key: "imageUrl2", label: "Image URL 2", type: "url", grp: "Identity" },
   { key: "imageUrl3", label: "Image URL 3", type: "url", grp: "Identity" },
@@ -45,7 +46,7 @@ export const FIELDS = [
 ];
 // Extra helper columns understood by the importer / written by the template (not stored as separate fields):
 export const HELPER_COLS = [["Department", "dept"], ["Category code", "categoryCode"], ["Style no.", "styleNo"]];
-export const NON_TEMPLATE = ["landing", "mrp", "selling", "margin", "createdAt", "updatedAt", "imageUrl2", "imageUrl3", "imageUrl4", "imageUrl5", "videoUrl", "skuSource", "missing"]; // extra columns beyond the original 28
+export const NON_TEMPLATE = ["supplierSku", "landing", "mrp", "selling", "margin", "createdAt", "updatedAt", "imageUrl2", "imageUrl3", "imageUrl4", "imageUrl5", "videoUrl", "skuSource", "missing"]; // extra columns beyond the original 28
 export const GENDER_CODES = { female: "W", male: "M", unisex: "U", kids: "K" };
 export const GENDER_MEANING = { W: "Women", M: "Men", U: "Unisex", K: "Kids" };
 
@@ -93,6 +94,7 @@ export const missingFields = (p, required) => required.filter((k) => k !== "bran
 export const VIRTUAL_FIELDS = [["name", "Product name"], ["category", "Category name"], ["categoryCode", "Category code"], ["department", "Department"], ["styleNo", "Style no."], ["brandCode", "Brand code"]];
 // Auto-mapping: marketplace header keyword → our field key (first match wins, checked top to bottom)
 export const AUTOMAP = [
+  [/(supplier|vendor[ _-]*part|factory|manufacturer)[ _-]*(sku|code|no|number)|supplier[ _-]*ref/, "supplierSku"],
   [/(seller|vendor|merchant|item)[ _-]*sku|^sku|sku[ _-]*(id|code)/, "sku"], [/brand/, "brand"],
   [/main[ _-]*image|image[ _-]*url[ _-]*1|^image[ _-]*(url)?$|primary[ _-]*image|front[ _-]*image/, "imageUrl"],
   [/image.*2|other[ _-]*image.*1/, "imageUrl2"], [/image.*3|other[ _-]*image.*2/, "imageUrl3"], [/image.*4|other[ _-]*image.*3/, "imageUrl4"], [/image.*5|other[ _-]*image.*4/, "imageUrl5"], [/video/, "videoUrl"],

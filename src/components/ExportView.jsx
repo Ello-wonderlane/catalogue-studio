@@ -5,7 +5,7 @@ import FormatBuilder from "./FormatBuilder.jsx";
 import { SEG_HELP } from "../config/taxonomy.js";
 import { uid, download, emptyProduct, valueOf } from "../lib/util.js";
 import { usingSupabase } from "../lib/storage.js";
-import { uniqueCode, directImageUrl, isFolderLink, buildSku, nextStyleNo, ensureUniqueSku, decodeSku } from "../lib/sku.js";
+import { uniqueCode, directImageUrl, isFolderLink, buildSku, nextStyleNo, ensureUniqueSku, decodeSku, supplierToMerchantSku } from "../lib/sku.js";
 
 function healthCheck(products, ctx) {
   const issues = [];
@@ -59,6 +59,7 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
   });
   const [scope, setScope] = useState("all");
   const [importMode, setImportMode] = useState("add");
+  const [supplierPrefix, setSupplierPrefix] = useState(2); // supplier brand characters to swap for ours
   const rows = products.filter((p) => scope === "all" || p.brandId === scope);
   const sel = new Set(exportPrefs.fields);
   const toggle = (k) => setExportPrefs({ ...exportPrefs, fields: sel.has(k) ? exportPrefs.fields.filter((x) => x !== k) : [...exportPrefs.fields, k] });
@@ -131,7 +132,7 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
         const head = aoa[0].map(norm); const idx = (label) => head.indexOf(norm(label));
         let newBrands = [...brands]; const newCats = [], newMats = [], newCols = []; const out = []; const updates = [];
         const localColours = [...ctx.colours]; const localCats = [...ctx.categories];
-        const bySku = new Map(products.map((p) => [p.sku, p])); const seenInSheet = new Set(); let skipped = 0, blank = 0;
+        const bySku = new Map(products.map((p) => [p.sku, p])); const seenInSheet = new Set(); let skipped = 0, blank = 0, mapped = 0;
         const now = new Date().toISOString();
         const helper = (label) => { const i = idx(label); return i >= 0 ? String(aoa_row[i] ?? "").trim() : ""; };
         let aoa_row = null;
@@ -146,6 +147,10 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
           let b = newBrands.find((x) => x.name.toLowerCase() === bname.toLowerCase());
           if (!b) { b = { id: "b_" + uid(), name: bname, code: uniqueCode(bname, newBrands.map((x) => x.code)), hsn: p.hsn, gst: p.gst, warranty: p.warranty, care: p.care }; newBrands.push(b); }
           p.brandId = b.id;
+          // Supplier sheet: swap their leading brand characters for our code and keep the rest of their
+          // number, so one glance matches a row in their inventory to a row in ours. Their original code
+          // stays on the product in Supplier SKU. A row that already carries our own SKU is left alone.
+          if (!p.sku && p.supplierSku) { const s = supplierToMerchantSku(p.supplierSku, b.code, supplierPrefix); if (s) { p.sku = s; mapped++; } }
           // helper columns from the template
           const hCat = helper("Category code").toUpperCase(), hStyle = helper("Style no.").replace(/\D/g, ""), hDept = helper("Department");
           if (hCat) { p.categoryCode = hCat; if (!localCats.some((c) => c.code === hCat)) { const c = { dept: hDept || "Imported", code: hCat, name: "Category " + hCat + " (rename me)" }; localCats.push(c); newCats.push(c); } }
@@ -180,7 +185,7 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
         if (newMats.length) setMaterials((ms) => [...ms, ...newMats]);
         registerColours(newCols); setBrands(newBrands);
         addProducts(out, updates);
-        say(`Imported ${out.length} new${updates.length ? `, updated ${updates.length}` : ""}${skipped ? `, skipped ${skipped} existing/duplicate SKUs` : ""}${blank ? `, ${blank} rows had no SKU and no Category code` : ""}${newCats.length ? `, ${newCats.length} new category codes` : ""}`);
+        say(`Imported ${out.length} new${updates.length ? `, updated ${updates.length}` : ""}${mapped ? `, ${mapped} SKUs mapped from supplier codes` : ""}${skipped ? `, skipped ${skipped} existing/duplicate SKUs` : ""}${blank ? `, ${blank} rows had no SKU and no Category code` : ""}${newCats.length ? `, ${newCats.length} new category codes` : ""}`);
       } catch (err) { say("Import failed: " + err.message); }
     };
     r.readAsArrayBuffer(f); e.target.value = "";
@@ -264,6 +269,7 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
           <h2 style={{ fontSize: 20, marginBottom: 6 }}>Import existing sheet</h2>
           <div className="note" style={{ marginBottom: 12 }}>Drop in the template (or any sheet with the same headers) — new rows are appended, nothing existing is replaced unless you choose the update mode. Brands are created automatically, SKUs already present are skipped (never duplicated), colours are registered with unique codes, and SKUs are decoded into category / style / material so new colourways continue the numbering.</div>
           <div className="field"><label>Import mode</label><select value={importMode} onChange={(e) => setImportMode(e.target.value)}><option value="add">Add new only — rows whose SKU already exists are skipped (safe)</option><option value="update">Add new + update existing — matching SKUs get the sheet's values (bulk price/text updates)</option></select></div>
+          <div className="field"><label>Supplier SKU → our SKU</label><div className="row"><span className="note">Swap the first</span><input type="number" min="0" max="6" value={supplierPrefix} style={{ width: 60 }} onChange={(e) => setSupplierPrefix(e.target.value)} /><span className="note">characters of a <b>Supplier SKU</b> column for our brand code, keeping the rest of their number. Their code is stored on the product so both sides can match stock.</span></div></div>
           <input type="file" accept=".xlsx,.xls,.csv" onChange={importFile} />
           <div className="row" style={{ marginTop: 14 }}><button className="btn" onClick={downloadTemplate}>Download blank template (.xlsx)</button><span className="note">All columns incl. prices, plus Department / Category code / Style no. Leave SKU empty and it's generated on import.</span></div>
           <div style={{ marginTop: 20 }}><button className="btn small" onClick={() => { if (confirm("Remove ALL products? Brands and rules stay.")) clearProducts(); }}>Clear all products</button></div>

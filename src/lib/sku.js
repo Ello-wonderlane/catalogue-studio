@@ -80,6 +80,17 @@ export function directImageUrl(u) {
 }
 export const isFolderLink = (u) => /drive\.google\.com\/drive\/folders/.test(u || "");
 
+// Supplier SKU → our SKU. The supplier's own brand characters (usually the leading 2) are swapped for
+// our brand code and every remaining character is kept exactly as the supplier wrote it, so the same
+// tail identifies the item in their inventory and in ours. Returns "" when the code is too short to
+// leave a tail behind, and the caller then falls back to generating a SKU from the rule.
+export function supplierToMerchantSku(supplierSku, brandCode, prefixLen = 2) {
+  const raw = String(supplierSku || "").trim().toUpperCase();
+  const n = Math.max(0, parseInt(prefixLen, 10) || 0);
+  if (!raw || !brandCode || raw.length <= n) return "";
+  return brandCode.toUpperCase() + raw.slice(n);
+}
+
 // Build the SKU and, if it already exists (manual, imported or generated), move to the next free style number.
 export function ensureUniqueSku(p, ctx, takenSet) {
   let styleNo = p.styleNo || "1"; let sku = buildSku({ ...p, styleNo }, ctx).sku; let guard = 0;
