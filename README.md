@@ -160,6 +160,53 @@ It writes the backup in first and only then removes rows the backup does not con
 
 **Getting at your backups from another laptop or another Claude session:** `gh auth login`, then `git clone https://github.com/Ello-wonderlane/catalogue-backups.git`. Private means only you and people you invite — not that it is tied to one machine.
 
+## 4e. Product images and video
+
+Images live in a Supabase Storage bucket called `product-images`, one folder per SKU:
+
+    products/<SKU>/1.jpg   main image   -> Image URL      -> Amazon main_image_url
+    products/<SKU>/2.jpg   angle 2      -> Image URL 2    -> Amazon other_image_url1
+    ...                                                      (same for Flipkart / Myntra)
+    products/<SKU>/5.jpg   angle 5      -> Image URL 5
+
+**Uploading.** Image studio -> Bulk tab -> pick photos named after their SKU
+(`YSWHA0154PCB.jpg`, and `YSWHA0154PCB-2.jpg` for the second angle) -> Process ->
+**Upload & link to products**. Each photo is stored at its SKU path and the permanent URL is
+written into the right Image URL field automatically. The first image also becomes the
+catalogue thumbnail. No copying links by hand.
+
+The bucket is public on purpose: Amazon, Flipkart and Myntra fetch image URLs anonymously when
+they ingest a listing, so a private bucket would break your uploads. Google Drive **folder**
+links never worked for this — they do not render and marketplaces reject them.
+
+**How much fits in the free plan.** A marketplace-quality photo (1600px, JPEG) is roughly
+300 KB, so five images is about 1.5 MB per SKU:
+
+| | |
+|---|---|
+| Supabase free storage | 1 GB |
+| 5 images x 5 MB limit each | enforced by the bucket |
+| Capacity at 5 images per SKU | **~650 SKUs** |
+
+Bandwidth is not a concern either: marketplaces fetch each image once at ingestion and then
+serve it from their own CDN, so the 5 GB/month egress is really just your team browsing.
+
+**Video does not belong here.** A 30-second 1080p clip is 20-50 MB, so about 28 videos would
+fill the entire 1 GB. You rarely need to host it anyway — Amazon, Flipkart and Myntra all want
+video uploaded inside their own seller portal. Put an unlisted YouTube link in the Video URL
+field for your own reference.
+
+**When you outgrow 1 GB**, move the images to **Cloudflare R2**: 10 GB free and no egress
+charges at all, S3-compatible so nothing locks you in. Copy the bucket across keeping the same
+`products/<SKU>/n.jpg` paths, then rewrite every product's links in one command:
+
+```bash
+node scripts/rehost.mjs https://old-base/ https://new-base/ --dry-run   # preview
+node scripts/rehost.mjs https://old-base/ https://new-base/
+```
+
+---
+
 ## 5. Optional free AI on your own PC
 
 - **Text drafting (product copy):** install **Ollama** (https://ollama.com), then `ollama pull llama3.2` and start it with CORS allowed so the browser may call it:

@@ -107,3 +107,46 @@ export const auth = {
 export async function listUsers() { if (!sb) return []; const { data } = await sb.from("catalogue_users").select("email,role,added_at").order("added_at"); return data || []; }
 export async function addUser(email, role = "editor") { const { error } = await sb.from("catalogue_users").insert({ email: email.trim().toLowerCase(), role }); if (error) throw error; }
 export async function removeUser(email) { const { error } = await sb.from("catalogue_users").delete().eq("email", email); if (error) throw error; }
+
+// ---------- product images (Supabase Storage) ----------
+// One folder per SKU: products/<SKU>/1.jpg … 5.jpg. The path is derived from the SKU, so an
+// image's address is always predictable and never depends on who uploaded it or when.
+// Moving to another host later (e.g. Cloudflare R2, which has no egress fees) means copying
+// the folder and rewriting IMAGE_BASE — see scripts/rehost.mjs.
+export const IMAGE_BUCKET = "product-images";
+export const IMAGE_BASE = usingSupabase ? `${URL}/storage/v1/object/public/${IMAGE_BUCKET}/` : "";
+export const imagePath = (sku, slot) => `products/${String(sku).trim().toUpperCase()}/${slot}.jpg`;
+export const imageUrlFor = (sku, slot) => IMAGE_BASE + imagePath(sku, slot);
+// which product field a slot maps to: 1 -> imageUrl, 2 -> imageUrl2 …
+export const imageField = (slot) => (slot === 1 ? "imageUrl" : "imageUrl" + slot);
+
+const dataUrlToBlob = async (d) => (typeof d === "string" ? (await fetch(d)).blob() : d);
+
+// Upload one image and return its permanent public URL. upsert:true so re-uploading a photo
+// for the same SKU replaces it rather than piling up duplicates.
+export async function uploadProductImage(sku, slot, dataUrlOrBlob) {
+  if (!usingSupabase) throw new Error("Image upload needs Supabase — set it up first (README 4b).");
+  if (!sku) throw new Error("Save the product and give it a SKU before uploading images.");
+  const body = await dataUrlToBlob(dataUrlOrBlob);
+  const path = imagePath(sku, slot);
+  const { error } = await sb.storage.from(IMAGE_BUCKET).upload(path, body, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
+  if (error) throw new Error(error.message || "Upload failed");
+  // cache-buster so a replaced photo shows immediately instead of the browser's old copy
+  return IMAGE_BASE + path + "?v=" + Date.now().toString(36);
+}
+
+export async function deleteProductImage(sku, slot) {
+  if (!usingSupabase) return;
+  await sb.storage.from(IMAGE_BUCKET).remove([imagePath(sku, slot)]);
+}
+
+// Every image already stored for a SKU, newest URL first — used to show what a product has.
+export async function listProductImages(sku) {
+  if (!usingSupabase || !sku) return [];
+  const { data, error } = await sb.storage.from(IMAGE_BUCKET).list(`products/${String(sku).trim().toUpperCase()}`);
+  if (error) return [];
+  return (data || [])
+    .map((f) => Number((f.name.match(/^(\d+)\.jpg$/) || [])[1]))
+    .filter((n) => n >= 1 && n <= 5)
+    .sort((a, b) => a - b);
+}

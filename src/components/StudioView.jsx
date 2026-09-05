@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { loadImage, readFile, removeBackground, trimTransparent, proceduralBackground, composite, thumbOf } from "../lib/image.js";
 import { makeBackground } from "../lib/ai.js";
 import { download, sleep } from "../lib/util.js";
+import { uploadProductImage, imageField, usingSupabase } from "../lib/storage.js";
 
-export default function StudioView({ products, product, setProduct, aiSettings, setAiSettings, onApplyThumb, say }) {
+export default function StudioView({ products, product, setProduct, aiSettings, setAiSettings, onApplyThumb, onApplyImage, say }) {
   const [mode, setMode] = useState("single");
   const [src, setSrc] = useState(null); const [cut, setCut] = useState(null); const [result, setResult] = useState(null);
   const [tol, setTol] = useState(40);
@@ -28,7 +29,21 @@ export default function StudioView({ products, product, setProduct, aiSettings, 
   // ---- bulk ----
   const onFiles = async (e) => {
     const fs = [...(e.target.files || [])]; const items = [];
-    for (const f of fs) { const s = await readFile(f); const base = f.name.replace(/\.[^.]+$/, ""); const sku = products.find((p) => p.sku && base.toUpperCase().includes(p.sku))?.sku || ""; items.push({ name: base, src: s, out: null, status: "queued", sku }); }
+    // Longest SKU first: with plain "includes", a short SKU that happens to sit inside a longer
+    // one would claim the photo, silently attaching it to the wrong product. Whatever follows the
+    // SKU must be nothing, or a separator plus the image number ("SKU-2.jpg" -> slot 2).
+    const bySku = products.filter((p) => p.sku).sort((a, b) => b.sku.length - a.sku.length);
+    const match = (base) => {
+      const u = base.toUpperCase().replace(/\s+/g, "");
+      for (const p of bySku) {
+        const sku = p.sku.toUpperCase();
+        if (!u.startsWith(sku)) continue;
+        const m = u.slice(sku.length).match(/^[-_]?(\d{1,2})?$/);
+        if (m) return { sku: p.sku, slot: Math.min(5, Math.max(1, Number(m[1] || 1))) };
+      }
+      return { sku: "", slot: 1 };
+    };
+    for (const f of fs) { const s = await readFile(f); const base = f.name.replace(/\.[^.]+$/, ""); const { sku, slot } = match(base); items.push({ name: base, src: s, out: null, status: "queued", sku, slot }); }
     setBatch(items); e.target.value = "";
   };
   const runBatch = async () => {
@@ -47,6 +62,27 @@ export default function StudioView({ products, product, setProduct, aiSettings, 
     setBusy(""); say("Batch finished");
   };
   const downloadAll = async () => { for (const it of batch) { if (it.out) { download(it.out, (it.sku || it.name) + "-bg.jpg"); await sleep(350); } } };
+  const uploadAll = async () => {
+    const ready = batch.filter((it) => it.out && it.sku);
+    if (!ready.length) return say("Nothing to upload — file names must match a SKU.");
+    let ok = 0, failed = 0;
+    for (let i = 0; i < ready.length; i++) {
+      const it = ready[i];
+      setBusy(`Uploading ${i + 1} / ${ready.length}…`);
+      try {
+        const url = await uploadProductImage(it.sku, it.slot || 1, it.out);
+        const p = products.find((x) => x.sku === it.sku);
+        if (p) { onApplyImage?.(p.id, imageField(it.slot || 1), url, it.slot === 1 ? it.thumb : null); ok++; }
+        setBatch((b) => b.map((x) => (x === it ? { ...x, status: "uploaded" } : x)));
+      } catch (e) {
+        failed++; console.error(e);
+        setBatch((b) => b.map((x) => (x === it ? { ...x, status: "upload failed" } : x)));
+      }
+      await sleep(30);
+    }
+    setBusy("");
+    say(failed ? `Uploaded ${ok}, ${failed} failed — see the console` : `Uploaded ${ok} image${ok === 1 ? "" : "s"} and linked them to their products`);
+  };
   const applyThumbs = () => { let n = 0; batch.forEach((it) => { if (it.sku && it.thumb) { const p = products.find((x) => x.sku === it.sku); if (p) { onApplyThumb(p.id, it.thumb); n++; } } }); say(n ? `Set ${n} thumbnails by matching SKU in file names` : "No file names matched an existing SKU"); };
 
   const settings = (
@@ -101,8 +137,8 @@ export default function StudioView({ products, product, setProduct, aiSettings, 
           </div>}
         </>) : (<>
           {batch.length === 0 ? <div className="panel empty"><h3>No photos queued</h3>Pick a set of product photos, write one prompt, press Process.</div> : (<>
-            <div className="row" style={{ marginBottom: 10 }}><span className="note">{batch.filter((b) => b.status === "done").length} / {batch.length} done</span><span style={{ marginLeft: "auto" }} /><button className="btn primary" disabled={!batch.some((b) => b.out)} onClick={downloadAll}>Download all</button><button className="btn" disabled={!batch.some((b) => b.thumb && b.sku)} onClick={applyThumbs}>Set thumbnails by SKU</button><button className="btn" onClick={() => setBatch([])}>Clear</button></div>
-            <div className="bulk-grid">{batch.map((it, i) => <div className="item" key={i}><img src={it.out || it.src} alt="" /><div className="cap"><span className={"pill" + (it.status === "failed" ? " warn" : "")}>{it.status}</span> {it.sku && <span className="mono">{it.sku}</span>}<div>{it.name}</div>{it.out && <button className="btn small" style={{ marginTop: 4 }} onClick={() => download(it.out, (it.sku || it.name) + "-bg.jpg")}>Download</button>}</div></div>)}</div>
+            <div className="row" style={{ marginBottom: 10 }}><span className="note">{batch.filter((b) => b.status === "done").length} / {batch.length} done</span><span style={{ marginLeft: "auto" }} />{usingSupabase && <button className="btn primary" disabled={!batch.some((b) => b.out && b.sku) || !!busy} onClick={uploadAll}>Upload &amp; link to products</button>}<button className="btn" disabled={!batch.some((b) => b.out)} onClick={downloadAll}>Download all</button><button className="btn" disabled={!batch.some((b) => b.thumb && b.sku)} onClick={applyThumbs}>Set thumbnails by SKU</button><button className="btn" onClick={() => setBatch([])}>Clear</button></div>
+            <div className="bulk-grid">{batch.map((it, i) => <div className="item" key={i}><img src={it.out || it.src} alt="" /><div className="cap"><span className={"pill" + (it.status === "failed" ? " warn" : "")}>{it.status}</span> {it.sku && <span className="mono">{it.sku}{it.slot > 1 ? " #" + it.slot : ""}</span>}<div>{it.name}</div>{it.out && <button className="btn small" style={{ marginTop: 4 }} onClick={() => download(it.out, (it.sku || it.name) + "-bg.jpg")}>Download</button>}</div></div>)}</div>
           </>)}
         </>)}
         <div className="note" style={{ marginTop: 14 }}>Finished images download to your computer. Upload them to your image host and paste the file link into each product's Image URL — that link goes into the Excel. See Export / Import → Image links for what works and what's cheap.</div>

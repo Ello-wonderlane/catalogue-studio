@@ -91,3 +91,43 @@ drop policy if exists "owner manage" on catalogue_users;
 create policy "owner manage" on catalogue_users for all to authenticated
   using (exists (select 1 from catalogue_users u where lower(u.email) = lower(coalesce(auth.jwt() ->> 'email','')) and u.role = 'owner'))
   with check (exists (select 1 from catalogue_users u where lower(u.email) = lower(coalesce(auth.jwt() ->> 'email','')) and u.role = 'owner'));
+
+-- ============================================================
+-- v5: PRODUCT IMAGES. A Storage bucket holding one folder per SKU:
+--     products/<SKU>/1.jpg … 5.jpg
+-- Run this whole file again (SQL Editor → paste → Run) to add it.
+-- ============================================================
+
+-- The bucket is PUBLIC on purpose: Amazon / Flipkart / Myntra fetch image URLs
+-- anonymously when ingesting a listing, so a private bucket would break uploads.
+-- Product photos are meant to be seen. Your prices and margins are NOT in here —
+-- those live in catalogue_products, which stays behind the login policies above.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('product-images', 'product-images', true, 10485760,
+        array['image/jpeg','image/png','image/webp','image/avif'])
+on conflict (id) do update
+  set public = true,
+      file_size_limit = 10485760,
+      allowed_mime_types = array['image/jpeg','image/png','image/webp','image/avif'];
+
+-- Anyone may read (needed by the marketplaces). Only logged-in users on the
+-- allow-list may add, replace or remove images.
+drop policy if exists "product images public read" on storage.objects;
+create policy "product images public read" on storage.objects
+  for select using (bucket_id = 'product-images');
+
+drop policy if exists "product images team write" on storage.objects;
+create policy "product images team write" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'product-images' and public.is_catalogue_user());
+
+drop policy if exists "product images team update" on storage.objects;
+create policy "product images team update" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'product-images' and public.is_catalogue_user())
+  with check (bucket_id = 'product-images' and public.is_catalogue_user());
+
+drop policy if exists "product images team delete" on storage.objects;
+create policy "product images team delete" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'product-images' and public.is_catalogue_user());
