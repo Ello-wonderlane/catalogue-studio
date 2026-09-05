@@ -12,6 +12,7 @@ export default function MatchView({ products, brands, onApplyImage, say }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState("");
   const [done, setDone] = useState(0);
+  const [perProduct, setPerProduct] = useState(5);   // photos taken per product in one shoot run
 
   const onFiles = async (e) => {
     const fs = [...(e.target.files || [])].filter((f) => f.type.startsWith("image/"));
@@ -26,21 +27,50 @@ export default function MatchView({ products, brands, onApplyImage, say }) {
   };
 
   const assignedTo = (pid) => photos.filter((p) => p.productId === pid).sort((a, b) => a.slot - b.slot);
+
+  // A product shoot runs in sequence: five frames of one bag, then five of the next. So picking the
+  // first photo of a run also claims the following unassigned photos as angles 2-5, rather than
+  // making you click every frame. Clicking that first photo again releases the whole run.
+  const claimFrom = (ps, startId, product, count) => {
+    const free = ps.filter((x) => !x.productId || x.productId === product.id);
+    const at = free.findIndex((x) => x.id === startId);
+    if (at < 0) return ps;
+    const run = free.slice(at, at + count).map((x) => x.id);
+    return ps.map((x) => {
+      const i = run.indexOf(x.id);
+      return i >= 0 ? { ...x, productId: product.id, slot: i + 1 } : x;
+    });
+  };
+
   const toggle = (photo) => {
     if (!pick) return say("Choose a product on the right first");
     setPhotos((ps) => {
-      const mine = ps.filter((x) => x.productId === pick.id);
-      if (photo.productId === pick.id) {                      // clicking again unassigns and closes the gap
-        const rest = mine.filter((x) => x.id !== photo.id).sort((a, b) => a.slot - b.slot);
+      if (photo.productId === pick.id) {
+        if (photo.slot === 1) return ps.map((x) => (x.productId === pick.id ? { ...x, productId: "", slot: 0 } : x)); // release the run
+        const rest = ps.filter((x) => x.productId === pick.id && x.id !== photo.id).sort((a, b) => a.slot - b.slot);
         return ps.map((x) => {
           if (x.id === photo.id) return { ...x, productId: "", slot: 0 };
           const i = rest.findIndex((r) => r.id === x.id);
           return i >= 0 ? { ...x, slot: i + 1 } : x;
         });
       }
-      if (mine.length >= 5) { say(`${pick.sku || "This product"} already has 5 images`); return ps; }
-      return ps.map((x) => (x.id === photo.id ? { ...x, productId: pick.id, slot: mine.length + 1 } : x));
+      const taken = ps.filter((x) => x.productId === pick.id).length;
+      if (taken >= 5) { say(`${pick.sku || "This product"} already has 5 images`); return ps; }
+      return claimFrom(ps, photo.id, pick, Math.min(perProduct, 5));
     });
+  };
+
+  // Whole folder in one go, for a shoot done strictly in catalogue order.
+  const autoAll = () => {
+    const targets = list.filter((p) => p.sku && !photos.some((x) => x.productId === p.id));
+    const free = photos.filter((x) => !x.productId);
+    const n = Math.min(targets.length, Math.floor(free.length / perProduct));
+    if (!n) return say("Not enough unassigned photos for a full run");
+    if (!confirm(`Assign the first ${n * perProduct} unassigned photos to ${n} product(s), ${perProduct} each, in the order both are listed?\n\nCheck the result before uploading — you can click any photo to fix it.`)) return;
+    let next = photos;
+    for (let i = 0; i < n; i++) next = claimFrom(next, free[i * perProduct].id, targets[i], perProduct);
+    setPhotos(next);
+    say(`Assigned ${n * perProduct} photos to ${n} products — check them, then upload`);
   };
 
   const list = useMemo(() => {
@@ -79,7 +109,7 @@ export default function MatchView({ products, brands, onApplyImage, say }) {
       <div className="note" style={{ marginBottom: 12 }}>
         For a folder of camera photos when you don't know the SKU codes. Pick a product on the right,
         then click its photos in order — the first becomes the main image, the rest become angles 2-5.
-        Photos are shrunk to 1600px before upload, which is what the marketplaces want.
+        Clicking the first photo of a product also takes the next few that follow it, since shoots run in sequence — set how many below. Photos are shrunk to 1600px before upload, which is what the marketplaces want.
         {!usingSupabase && <b> Needs Supabase — set it up first.</b>}
       </div>
 
@@ -87,6 +117,10 @@ export default function MatchView({ products, brands, onApplyImage, say }) {
         <label className="btn" style={{ margin: 0 }}>Choose photos…
           <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onFiles} /></label>
         <span className="note">{photos.length} loaded · <b>{ready.length}</b> assigned{busy ? ` · ${busy}` : ""}</span>
+        <span className="note">Photos per product
+          <select value={perProduct} onChange={(e) => setPerProduct(+e.target.value)} style={{ marginLeft: 6, width: 56 }}>
+            {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></span>
+        <button className="btn" disabled={!photos.length} onClick={autoAll}>Auto-assign in order</button>
         <span style={{ marginLeft: "auto" }} />
         <button className="btn primary" disabled={!ready.length || !!busy || !usingSupabase} onClick={upload}>
           Upload {ready.length || ""} &amp; link</button>
@@ -139,7 +173,7 @@ export default function MatchView({ products, brands, onApplyImage, say }) {
             {!list.length && <div className="note" style={{ padding: 10 }}>No products match “{q}”.</div>}
           </div>
           <div className="note" style={{ marginTop: 8 }}>
-            Click a product, then its photos. Clicking an assigned photo again removes it and renumbers the rest.
+            Click a product, then the <b>first</b> photo of its run. Clicking that first photo again releases the whole run; clicking a later one drops just that photo.
           </div>
         </div>
       </div>
