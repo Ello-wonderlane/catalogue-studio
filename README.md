@@ -89,7 +89,7 @@ git commit -m "Add Size chart column"
 git push
 ```
 
-**Keeping data with the code (optional but recommended):** create a `data/` folder in the repo and commit your JSON backups (`Export / Import → Download backup`) there. Git history then doubles as an audit trail of the catalogue.
+**Never commit catalogue data to this repository.** It is public, and once prices, landing cost and margin are filled in, a committed backup exposes your cost structure permanently — git history keeps it even after the file is deleted. `data/` is in `.gitignore` for that reason. Backups go automatically to the **private** repo `Ello-wonderlane/catalogue-backups` (see 4d).
 
 ---
 
@@ -105,8 +105,9 @@ The repository already contains `.github/workflows/deploy.yml`, which builds and
 5. Every future `git push` to `main` re-publishes.
 
 Notes
-- Private repos need GitHub Pro for Pages, or make the repository public (the code has no secrets; your product data lives only in each user's browser + your backups). Alternative free hosts that work with private repos: **Netlify** or **Vercel** — sign in with GitHub, "Import project", build command `npm run build`, output `dist`. Same result.
-- The live site stores data in each visitor's browser. Team members share data via **JSON backup / restore** or the Excel export.
+- This repository stays **public** so GitHub Pages remains free (Pages on a private repo needs GitHub Pro). That is safe because it holds code only — no catalogue data, and no secrets. The Supabase anon key in the built page is public by design; Row Level Security is what protects your data, and the hourly watchdog verifies it (see 4d).
+- Moving host later is easy: the build output is a plain `dist/` folder. **Netlify** or **Cloudflare Pages** — sign in with GitHub, "Import project", build command `npm run build`, output `dist`. Both are free and work with private repos.
+- With Supabase configured, the live site stores data in Supabase and the whole team shares one catalogue. Without it, data stays in each visitor's browser.
 
 ---
 
@@ -133,7 +134,31 @@ One-time setup, ~5 minutes:
 Adding a teammate later (owner only): Help tab → Team access → add their email → then Supabase → Authentication → Users → Invite user. Removing them from Team access blocks them immediately.
 
 ## 4d. Watchdog (v4) — automatic health checks
-`.github/workflows/healthcheck.yml` runs every hour: live site up, Supabase up, code builds. On failure it opens a GitHub Issue and GitHub emails the owner. On Sundays it also stores a JSON backup of the whole catalogue in `data/` — for that, add one more repository secret **SUPABASE_SERVICE_ROLE_KEY** (Supabase → Project Settings → API Keys → service_role; never put this in the app). Run it manually any time from Actions → Health check → Run workflow.
+`.github/workflows/healthcheck.yml` runs every hour and checks four things:
+
+1. the live site answers,
+2. Supabase answers,
+3. **your data is still private** — it asks Supabase for your tables *without logging in* and fails if it gets back even one row. Your anon key is published inside the site bundle on purpose, so Row Level Security is the only thing keeping landing cost and margin off the open internet. If a policy is ever dropped, you get an email within the hour instead of finding out much later,
+4. the code still builds.
+
+On failure it opens a GitHub Issue and GitHub emails the owner.
+
+**Daily backup.** Once a day the same workflow writes a full backup — products, settings, edit history and the user list — to the private repo `Ello-wonderlane/catalogue-backups`, keeping the newest 30. It refuses to write a backup that reports zero products, or that loses more than half the catalogue at once, so a failed dump can never quietly overwrite good copies. If a big deletion is genuine, run the workflow by hand (Actions → Health check → Run workflow) and it will record it.
+
+Secrets required: **SUPABASE_SERVICE_ROLE_KEY** (Supabase → Project Settings → API Keys → service_role; never put this in the app) and **BACKUP_REPO_TOKEN** (a fine-grained personal access token with Contents: Read and write on the backups repo only).
+
+**Restoring.** Clone the backup repo alongside this one, then:
+
+```bash
+export SUPABASE_URL=https://xxxxxxxx.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=...
+node scripts/restore.mjs ../catalogue-backups/data/backup-2026-09-05.json --dry-run   # preview
+node scripts/restore.mjs ../catalogue-backups/data/backup-2026-09-05.json             # do it
+```
+
+It writes the backup in first and only then removes rows the backup does not contain, so an interrupted restore leaves the old catalogue intact rather than an empty database.
+
+**Getting at your backups from another laptop or another Claude session:** `gh auth login`, then `git clone https://github.com/Ello-wonderlane/catalogue-backups.git`. Private means only you and people you invite — not that it is tied to one machine.
 
 ## 5. Optional free AI on your own PC
 

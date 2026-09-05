@@ -1,4 +1,5 @@
-# Watchdog: every hour checks the live site + Supabase, rebuilds the code, and (Sundays) saves a JSON backup into data/.
+# Watchdog. Every hour: is the live site up, is Supabase up, is your pricing data still private,
+# does the code still build. Once a day it also writes a full backup to the PRIVATE backup repo.
 # On any failure it opens a GitHub Issue (and GitHub emails the repo owner).
 name: Health check
 on:
@@ -6,7 +7,7 @@ on:
     - cron: "17 * * * *"      # every hour
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
   issues: write
 jobs:
   check:
@@ -16,17 +17,21 @@ jobs:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_REPO: Ello-wonderlane/catalogue-backups
+      BACKUP_KEEP: "30"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+
       - name: 1. Live site answers
         run: |
           code=$(curl -s -o /tmp/site.html -w "%{http_code}" "$SITE_URL")
           echo "HTTP $code"; test "$code" = "200"
           grep -q "Catalogue Studio" /tmp/site.html && echo "page title OK"
+
       - name: 2. Supabase answers
         run: |
           # Auth service must be healthy (200). Database API just has to be reachable (any answer below 500).
@@ -34,26 +39,71 @@ jobs:
           echo "AUTH $code"; test "$code" = "200"
           code=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $VITE_SUPABASE_ANON_KEY" -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY" "$VITE_SUPABASE_URL/rest/v1/")
           echo "REST $code"; test "$code" -ge 200 && test "$code" -lt 500
-      - name: 3. Code still builds
-        run: npm ci && npm run build
-      - name: 4. Weekly backup to data/ (Sundays, needs SUPABASE_SERVICE_ROLE_KEY secret)
-        if: always()
+
+      - name: 3. Your data is still private (RLS canary)
         run: |
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "no service-role secret → backup skipped"; exit 0; fi
-          if [ "$(date -u +%u)" != "7" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then echo "not Sunday → skip"; exit 0; fi
-          mkdir -p data
+          # The anon key is published inside the site bundle on purpose, so Row Level Security is the ONLY
+          # thing keeping landing cost / margin / prices off the open internet. A logged-out request must
+          # see exactly zero rows. If this ever fails, treat it as urgent: your pricing may be readable.
+          fail=0
+          for t in catalogue_products catalogue_settings catalogue_history catalogue_users; do
+            range=$(curl -s -D - -o /dev/null \
+              -H "apikey: $VITE_SUPABASE_ANON_KEY" -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY" \
+              -H "Prefer: count=exact" -H "Range: 0-0" \
+              "$VITE_SUPABASE_URL/rest/v1/$t?select=*" | tr -d '\r' | sed -n 's/^[Cc]ontent-[Rr]ange: //p')
+            rows="${range##*/}"
+            if [ "$rows" = "0" ] || [ -z "$rows" ]; then
+              echo "OK    $t -> anonymous sees ${rows:-no} rows"
+            else
+              echo "LEAK  $t -> anonymous can read $rows rows"; fail=1
+            fi
+          done
+          test "$fail" = "0" || { echo "::error::RLS is open - anonymous users can read your data"; exit 1; }
+
+      - name: 4. Code still builds
+        run: npm ci && npm run build
+
+      - name: 5. Daily backup to the private repo
+        if: always()
+        env:
+          BACKUP_TOKEN: ${{ secrets.BACKUP_REPO_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "no service-role secret -> backup skipped"; exit 0; fi
+          if [ -z "$BACKUP_TOKEN" ]; then echo "no BACKUP_REPO_TOKEN secret -> backup skipped"; exit 0; fi
+
+          stamp=$(date -u +%F)
+          # Already backed up today? (hourly runs must not repeat the work 24 times a day)
+          rm -rf /tmp/bk && git clone -q --depth 1 "https://x-access-token:$BACKUP_TOKEN@github.com/$BACKUP_REPO.git" /tmp/bk
+          if [ -f "/tmp/bk/data/backup-$stamp.json" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "backup for $stamp already exists -> skip"; exit 0
+          fi
+
           H="Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
-          curl -sf -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "$H" "$VITE_SUPABASE_URL/rest/v1/catalogue_products?select=data" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const rows=JSON.parse(s);console.log(JSON.stringify(rows.map(r=>r.data)))})' > /tmp/products.json
-          curl -sf -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "$H" "$VITE_SUPABASE_URL/rest/v1/catalogue_settings?id=eq.main&select=data" > /tmp/settings.json
-          node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync("/tmp/products.json"));const s=(JSON.parse(fs.readFileSync("/tmp/settings.json"))[0]||{}).data||{};fs.writeFileSync("data/backup-"+new Date().toISOString().slice(0,10)+".json",JSON.stringify({...s,products:p,exportedAt:new Date().toISOString()},null,1));console.log("products:",p.length)'
-          ls data | tail -n +9 | sed 's#^#data/#' | xargs -r rm -f   # keep the 8 most recent backups
+          A="apikey: $SUPABASE_SERVICE_ROLE_KEY"
+          # -f makes curl fail the step on an HTTP error instead of writing an error page into the backup.
+          curl -sf -H "$A" -H "$H" "$VITE_SUPABASE_URL/rest/v1/catalogue_products?select=data"           > /tmp/products.json
+          curl -sf -H "$A" -H "$H" "$VITE_SUPABASE_URL/rest/v1/catalogue_settings?id=eq.main&select=data" > /tmp/settings.json
+          curl -sf -H "$A" -H "$H" "$VITE_SUPABASE_URL/rest/v1/catalogue_history?select=at,who,action,sku,detail&order=at.desc&limit=5000" > /tmp/history.json
+          curl -sf -H "$A" -H "$H" "$VITE_SUPABASE_URL/rest/v1/catalogue_users?select=email,role,added_at" > /tmp/users.json
+
+          mkdir -p /tmp/bk/data /tmp/dump
+          mv /tmp/products.json /tmp/settings.json /tmp/history.json /tmp/users.json /tmp/dump/
+          FORCE=${{ github.event_name == 'workflow_dispatch' && '1' || '0' }} \
+            node scripts/build-backup.mjs /tmp/dump /tmp/bk/data "$stamp"
+
+          # keep only the newest BACKUP_KEEP backups
+          ls /tmp/bk/data/backup-*.json 2>/dev/null | sort | head -n -"$BACKUP_KEEP" | xargs -r rm -f
+          cd /tmp/bk
           git config user.name "catalogue-bot"; git config user.email "bot@users.noreply.github.com"
-          git add data && (git commit -m "Weekly catalogue backup" && git push) || echo "nothing to commit"
+          git add -A data
+          git diff --cached --quiet && { echo "nothing changed"; exit 0; }
+          git commit -qm "Backup $stamp" && git push -q origin HEAD && echo "pushed to $BACKUP_REPO"
+
       - name: Open an issue if something failed
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create --title "⚠ Health check failed $(date -u +%F' '%H:%M) UTC" \
-            --body "One of the checks failed (site / Supabase / build). Open the run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --body "A check failed (site / Supabase / **RLS privacy canary** / build / backup). Open the run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --label "health" || gh issue create --title "⚠ Health check failed $(date -u +%F' '%H:%M) UTC" --body "See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

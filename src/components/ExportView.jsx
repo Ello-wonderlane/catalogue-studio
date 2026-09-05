@@ -4,6 +4,7 @@ import { FIELDS, NON_TEMPLATE, GENDER_MEANING, MARKETPLACES, HELPER_COLS, missin
 import FormatBuilder from "./FormatBuilder.jsx";
 import { SEG_HELP } from "../config/taxonomy.js";
 import { uid, download, emptyProduct, valueOf } from "../lib/util.js";
+import { usingSupabase } from "../lib/storage.js";
 import { uniqueCode, directImageUrl, isFolderLink, buildSku, nextStyleNo, ensureUniqueSku, decodeSku } from "../lib/sku.js";
 
 function healthCheck(products, ctx) {
@@ -192,8 +193,8 @@ export default function ExportView({ products, brands, setBrands, ctx, setCatego
         </div>
         <div className="panel">
           <h2 style={{ fontSize: 20, marginBottom: 6 }}>Backup & restore (JSON)</h2>
-          <div className="note" style={{ marginBottom: 10 }}>Data lives in this browser only. Download a JSON backup regularly (or commit it to your GitHub repo under <span className="mono">data/</span>) and restore it on any other device. Restore replaces everything.</div>
-          <div className="row"><button className="btn primary" onClick={() => download("data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ products, brands, categories: ctx.categories, materials: ctx.materials, colours: ctx.colours, skuConfig: ctx.skuConfig, exportedAt: new Date().toISOString() }, null, 2)), "catalogue-backup-" + new Date().toISOString().slice(0, 10) + ".json")}>Download backup</button>
+          <div className="note" style={{ marginBottom: 10 }}>{usingSupabase ? <>Your catalogue is stored in Supabase and shared by the whole team, and a full backup is saved automatically every day to the private <span className="mono">catalogue-backups</span> repository. This button is for taking an extra copy before a big import or clear-out. Restore replaces everything.</> : <>Data lives in this browser only. Download a JSON backup regularly and restore it on any other device. Restore replaces everything.</>}</div>
+          <div className="row"><button className="btn primary" onClick={() => download("data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ products, brands, categories: ctx.categories, materials: ctx.materials, colours: ctx.colours, skuConfig: ctx.skuConfig, exportPrefs, requiredFields: ctx.requiredFields, customFormats, exportedAt: new Date().toISOString() }, null, 2)), "catalogue-backup-" + new Date().toISOString().slice(0, 10) + ".json")}>Download backup</button>
             <label className="btn" style={{ margin: 0 }}>Restore backup<input type="file" accept=".json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { const j = JSON.parse(r.result); if (!confirm(`Replace current data with backup from ${j.exportedAt || "unknown date"} (${(j.products || []).length} products)?`)) return; restoreAll(j); } catch { say("Not a valid backup file"); } }; r.readAsText(f); e.target.value = ""; }} /></label></div>
         </div>
       </div>

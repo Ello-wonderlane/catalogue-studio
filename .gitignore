@@ -3,3 +3,7 @@ dist
 .DS_Store
 *.local
 .env
+
+# Catalogue data never belongs in this public repo.
+# Daily backups go to the private repo Ello-wonderlane/catalogue-backups.
+data/
